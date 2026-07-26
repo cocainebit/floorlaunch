@@ -1,26 +1,32 @@
 import { useState } from "react";
 import type { MarketInfo } from "../api";
 import { useFlWallet } from "../wallet";
-import { ammBuy, ammSell } from "../tx";
+import { ammBuy, ammSell, curveBuy, curveSell, graduate } from "../tx";
 
 const FEE_BPS = 70;
 const SLIPPAGE = 0.02; // 2% guard on the quoted output
 
+const isCurve = (m: MarketInfo) => m.status === "bootstrap";
+const reserves = (m: MarketInfo) =>
+  isCurve(m)
+    ? { sol: m.curveVirtualSol, tok: m.curveVirtualTokens }
+    : { sol: m.ammSolReserve, tok: m.ammTokenReserve };
+
 function quoteBuy(m: MarketInfo, solIn: number) {
+  const { sol, tok } = reserves(m);
   const net = solIn * (1 - FEE_BPS / 10_000);
-  const k = m.ammSolReserve * m.ammTokenReserve;
-  const out = m.ammTokenReserve - k / (m.ammSolReserve + net);
-  const mid = m.ammSolReserve / m.ammTokenReserve;
+  const k = sol * tok;
+  const out = tok - k / (sol + net);
   const eff = net / out;
-  return { out, impact: (eff / mid - 1) * 100, fee: solIn * (FEE_BPS / 10_000) };
+  return { out, impact: (eff / (sol / tok) - 1) * 100, fee: solIn * (FEE_BPS / 10_000) };
 }
 function quoteSell(m: MarketInfo, tokensIn: number) {
-  const k = m.ammSolReserve * m.ammTokenReserve;
-  const gross = m.ammSolReserve - k / (m.ammTokenReserve + tokensIn);
+  const { sol, tok } = reserves(m);
+  const k = sol * tok;
+  const gross = sol - k / (tok + tokensIn);
   const out = gross * (1 - FEE_BPS / 10_000);
-  const mid = m.ammSolReserve / m.ammTokenReserve;
   const eff = gross / tokensIn;
-  return { out, impact: (1 - eff / mid) * 100, fee: gross * (FEE_BPS / 10_000) };
+  return { out, impact: (1 - eff / (sol / tok)) * 100, fee: gross * (FEE_BPS / 10_000) };
 }
 
 type Status =
@@ -42,10 +48,12 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
     if (!wallet.provider || !q) return;
     setStatus({ kind: "sending" });
     try {
+      const buyFn = isCurve(m) ? curveBuy : ammBuy;
+      const sellFn = isCurve(m) ? curveSell : ammSell;
       const r =
         side === "buy"
-          ? await ammBuy(wallet.provider, m.market, amt, q.out * (1 - SLIPPAGE))
-          : await ammSell(wallet.provider, m.market, amt, q.out * (1 - SLIPPAGE));
+          ? await buyFn(wallet.provider, m.market, amt, q.out * (1 - SLIPPAGE))
+          : await sellFn(wallet.provider, m.market, amt, q.out * (1 - SLIPPAGE));
       setStatus({ kind: "ok", sig: r.sig });
     } catch (e: any) {
       const msg = String(e.message ?? e);
@@ -54,8 +62,41 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
     }
   }
 
+  const curveProgress = isCurve(m)
+    ? Math.min(100, (m.curveSolRaised / m.graduationTargetSol) * 100)
+    : null;
+
+  async function doGraduate() {
+    if (!wallet.provider) return;
+    setStatus({ kind: "sending" });
+    try {
+      const r = await graduate(wallet.provider, m.market);
+      setStatus({ kind: "ok", sig: r.sig });
+    } catch (e: any) {
+      setStatus({ kind: "error", msg: String(e.message ?? e).slice(0, 90) });
+    }
+  }
+
   return (
     <div className="card trade-card">
+      {curveProgress !== null && (
+        <div className="curve-banner">
+          <div className="row">
+            <span>Launch curve</span>
+            <span className="mono">
+              {m.curveSolRaised.toFixed(2)} / {m.graduationTargetSol.toFixed(0)} SOL
+            </span>
+          </div>
+          <div className="curve-bar">
+            <div className="curve-fill" style={{ width: `${curveProgress}%` }} />
+          </div>
+          {curveProgress >= 100 && wallet.connected && (
+            <button className="cta neutral graduate-btn" onClick={doGraduate}>
+              Graduate to AMM
+            </button>
+          )}
+        </div>
+      )}
       <div className="side-tabs">
         <button
           className={`side-tab buy ${side === "buy" ? "active" : ""}`}

@@ -4,21 +4,26 @@ import TradePanel from "./components/TradePanel";
 import HedgePanel from "./components/HedgePanel";
 import UnderlyingStrip from "./components/UnderlyingStrip";
 import Panels from "./components/Panels";
+import LaunchFlow from "./components/LaunchFlow";
 import {
   fetchMarkets,
   fetchTrades,
   fetchFunding,
+  fetchListings,
   subscribe,
   type MarketInfo,
   type Trade,
   type IndexTick,
   type FundingTick,
+  type ListingMeta,
 } from "./api";
 import { COLLECTION_META } from "./config";
 import { useFlWallet } from "./wallet";
 
 export default function App() {
   const wallet = useFlWallet();
+  const [view, setView] = useState<"markets" | "launch">("markets");
+  const [listings, setListings] = useState<Record<string, ListingMeta>>({});
   const [markets, setMarkets] = useState<MarketInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -37,8 +42,11 @@ export default function App() {
         })
         .catch(() => {});
     load();
+    const loadListings = () => fetchListings().then(setListings).catch(() => {});
+    loadListings();
     const iv = setInterval(load, 5000);
-    return () => clearInterval(iv);
+    const iv2 = setInterval(loadListings, 10000);
+    return () => { clearInterval(iv); clearInterval(iv2); };
   }, []);
 
   useEffect(() => {
@@ -73,9 +81,21 @@ export default function App() {
           floor<span className="brand-accent">launch</span>
         </div>
         <nav className="nav">
-          <span className="nav-item active">Markets</span>
-          <span className="nav-item">Launch</span>
-          <span className="nav-item">Docs</span>
+          <span
+            className={`nav-item ${view === "markets" ? "active" : ""}`}
+            onClick={() => setView("markets")}
+          >
+            Markets
+          </span>
+          <span
+            className={`nav-item ${view === "launch" ? "active" : ""}`}
+            onClick={() => setView("launch")}
+          >
+            Launch
+          </span>
+          <a className="nav-item" href="http://localhost:3333" target="_blank" rel="noreferrer">
+            Docs
+          </a>
         </nav>
         <div className="top-right">
           <select
@@ -83,13 +103,16 @@ export default function App() {
             value={selected ?? ""}
             onChange={(e) => setSelected(e.target.value)}
           >
-            {markets.map((m) => (
-              <option key={m.market} value={m.market}>
-                {(COLLECTION_META[m.collection]?.name ?? m.market.slice(0, 8)) +
-                  " · " +
-                  (COLLECTION_META[m.collection]?.ticker ?? "")}
-              </option>
-            ))}
+            {markets.map((m) => {
+              const l = listings[m.market];
+              const name = l?.name ?? COLLECTION_META[m.collection]?.name ?? m.market.slice(0, 8);
+              const tk = l?.ticker ?? COLLECTION_META[m.collection]?.ticker ?? "";
+              return (
+                <option key={m.market} value={m.market}>
+                  {name + " · " + tk}
+                </option>
+              );
+            })}
           </select>
           <button
             className="wallet-btn"
@@ -101,10 +124,19 @@ export default function App() {
         </div>
       </header>
 
-      {market ? (
+      {view === "launch" ? (
+        <LaunchFlow
+          live={new Set(markets.map((m) => m.market))}
+          onLaunched={(mkt) => {
+            fetchListings().then(setListings).catch(() => {});
+            setSelected(mkt);
+            setView("markets");
+          }}
+        />
+      ) : market ? (
         <main className="layout">
           <div className="col-main">
-            <UnderlyingStrip m={market} />
+            <UnderlyingStrip m={market} listing={listings[market.market]} />
             <Chart
               market={market.market}
               lastTrade={lastTrade}

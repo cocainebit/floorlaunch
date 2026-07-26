@@ -12,6 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
+import { devLaunch, loadListings } from "./launch.js";
 
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
 const WS_RPC = process.env.RPC_WS_URL ?? RPC.replace("http", "ws").replace("8899", "8900");
@@ -84,7 +85,7 @@ const program = new anchor.Program(
 );
 
 const n = (x: any) => Number(x?.toString?.() ?? x);
-const f = (o: any, ...keys: string[]) => { for (const k of keys) if (o[k] !== undefined) return o[k]; };
+const fld = (o: any, ...keys: string[]) => { for (const k of keys) if (o[k] !== undefined) return o[k]; };
 const perTokenSol = (solLamports: number, tokenBase: number) =>
   solLamports / LAMPORTS_PER_SOL / (tokenBase / BASE_UNITS_PER_TOKEN);
 
@@ -97,10 +98,10 @@ function handleEvent(rawName: string, data: any, sig: string, ts: number) {
     const market = data.market.toBase58();
     const t: Trade = {
       ts,
-      side: f(data, "isBuy", "is_buy") ? "buy" : "sell",
-      priceSol: perTokenSol(n(f(data, "solAmount", "sol_amount")), n(f(data, "tokenAmount", "token_amount"))),
-      solAmount: n(f(data, "solAmount", "sol_amount")) / LAMPORTS_PER_SOL,
-      tokenAmount: n(f(data, "tokenAmount", "token_amount")) / BASE_UNITS_PER_TOKEN,
+      side: fld(data, "isBuy", "is_buy") ? "buy" : "sell",
+      priceSol: perTokenSol(n(fld(data, "solAmount", "sol_amount")), n(fld(data, "tokenAmount", "token_amount"))),
+      solAmount: n(fld(data, "solAmount", "sol_amount")) / LAMPORTS_PER_SOL,
+      tokenAmount: n(fld(data, "tokenAmount", "token_amount")) / BASE_UNITS_PER_TOKEN,
       phase: name === "curveTraded" ? "curve" : "amm",
       sig,
       user: data.user.toBase58(),
@@ -116,7 +117,7 @@ function handleEvent(rawName: string, data: any, sig: string, ts: number) {
     const market = data.market.toBase58();
     const f = {
       ts,
-      rateBpsPerDay: n(f(data, "rateBpsPerDay", "rate_bps_per_day")),
+      rateBpsPerDay: n(fld(data, "rateBpsPerDay", "rate_bps_per_day")),
       mark: n(data.mark) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
       index: n(data.index) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
     };
@@ -166,6 +167,18 @@ function candles(market: string, tfSecs: number, limit: number) {
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+app.get("/listings", (_req, res) => res.json(loadListings()));
+
+app.post("/dev/launch", async (req, res) => {
+  try {
+    const r = await devLaunch(RPC, PROGRAM_ID, structuredClone(idl), req.body);
+    res.json(r);
+  } catch (e: any) {
+    res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
 
 app.get("/markets", async (_req, res) => {
   try {
@@ -193,6 +206,9 @@ app.get("/markets", async (_req, res) => {
         totalCollateralSol: Number(a.account.totalCollateral) / LAMPORTS_PER_SOL,
         fundingIndex: a.account.fundingIndex.toString(),
         curveSolRaised: Number(a.account.curveSolRaised) / LAMPORTS_PER_SOL,
+        curveVirtualSol: Number(a.account.curveVirtualSol) / LAMPORTS_PER_SOL,
+        curveVirtualTokens: Number(a.account.curveVirtualTokens) / BASE_UNITS_PER_TOKEN,
+        graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
         maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
       }))
     );

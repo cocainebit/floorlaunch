@@ -1,17 +1,25 @@
-import type { MarketInfo } from "../api";
+import type { MarketInfo, ListingMeta } from "../api";
 import { COLLECTION_META, FALLBACK_META } from "../config";
 
 const PER_UNIT = 1_000_000;
 
-const ago = (ts: number) => {
-  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ago`;
-};
-
-export default function UnderlyingStrip({ m }: { m: MarketInfo }) {
-  const meta = COLLECTION_META[m.collection] ?? FALLBACK_META;
+export default function UnderlyingStrip({
+  m,
+  listing,
+}: {
+  m: MarketInfo;
+  listing?: ListingMeta;
+}) {
+  const base = COLLECTION_META[m.collection] ?? FALLBACK_META;
+  const meta = listing
+    ? {
+        name: listing.name,
+        ticker: listing.ticker,
+        image: listing.image ?? base.image,
+        underlying: listing.identifier.startsWith("card:") ? "graded card" : "NFT floor",
+        venue: listing.identifier.startsWith("card:") ? "price feed" : "Magic Eden",
+      }
+    : base;
   const indexUnit = m.indexPerToken * PER_UNIT;
   const markUnit = m.markPerToken * PER_UNIT;
   const premium = indexUnit > 0 ? ((markUnit - indexUnit) / indexUnit) * 100 : 0;

@@ -16,6 +16,9 @@ export interface MarketInfo {
   insuranceSol: number;
   totalCollateralSol: number;
   curveSolRaised: number;
+  curveVirtualSol: number;
+  curveVirtualTokens: number;
+  graduationTargetSol: number;
   fundingIndex: string;
   maxOpenInterest: number;
 }
@@ -59,7 +62,17 @@ const get = async <T>(path: string): Promise<T> => {
   return r.json();
 };
 
+export interface ListingMeta {
+  ticker: string;
+  name: string;
+  image: string | null;
+  links: Record<string, string | undefined>;
+  feeReceiver: { kind: string; value: string };
+  identifier: string;
+}
+
 export const fetchMarkets = () => get<MarketInfo[]>("/markets");
+export const fetchListings = () => get<Record<string, ListingMeta>>("/listings");
 export const fetchCandles = (m: string, tf: number, limit = 500) =>
   get<Candle[]>(`/candles/${m}?tf=${tf}&limit=${limit}`);
 export const fetchTrades = (m: string, limit = 60) =>

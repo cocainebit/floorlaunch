@@ -46,6 +46,67 @@ function pdas(market: PublicKey, owner?: PublicKey) {
   return { mint, pool, treasury, vault, short };
 }
 
+export async function curveBuy(
+  provider: anchor.AnchorProvider,
+  market: string,
+  solIn: number,
+  minTokensOut: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.curveBuy(
+      new BN(Math.floor(solIn * LAMPORTS)),
+      new BN(Math.floor(minTokensOut * TOKEN_BASE))
+    )
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      poolToken: p.pool,
+      solVault: p.vault,
+      user: provider.wallet.publicKey,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function curveSell(
+  provider: anchor.AnchorProvider,
+  market: string,
+  tokensIn: number,
+  minSolOut: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.curveSell(
+      new BN(Math.floor(tokensIn * TOKEN_BASE)),
+      new BN(Math.floor(minSolOut * LAMPORTS))
+    )
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      poolToken: p.pool,
+      solVault: p.vault,
+      user: provider.wallet.publicKey,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function graduate(
+  provider: anchor.AnchorProvider,
+  market: string
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.graduate()
+    .accountsPartial({ market: m, synthMint: p.mint, poolToken: p.pool })
+    .rpc();
+  return { sig };
+}
+
 export async function ammBuy(
   provider: anchor.AnchorProvider,
   market: string,
