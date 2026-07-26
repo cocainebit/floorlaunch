@@ -56,11 +56,17 @@ export default function UnderlyingStrip({
       <div className="u-stats">
         <div className="u-stat">
           <div className="u-label">Floor index</div>
-          <div className="u-value index-color">{indexUnit.toFixed(3)} SOL</div>
+          <div className="u-value index-color">
+            {m.solUsd > 0 ? `$${(indexUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${indexUnit.toFixed(3)} SOL`}
+            {m.solUsd > 0 && <span className="u-sub-val">{indexUnit.toFixed(3)} SOL</span>}
+          </div>
         </div>
         <div className="u-stat">
           <div className="u-label">Token mark</div>
-          <div className="u-value">{markUnit.toFixed(3)} SOL</div>
+          <div className="u-value">
+            {m.solUsd > 0 ? `$${(markUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${markUnit.toFixed(3)} SOL`}
+            {m.solUsd > 0 && <span className="u-sub-val">{markUnit.toFixed(3)} SOL</span>}
+          </div>
         </div>
         <div className="u-stat">
           <div className="u-label">Premium</div>

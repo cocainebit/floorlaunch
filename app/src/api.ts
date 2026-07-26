@@ -2,6 +2,7 @@ import { INDEXER_HTTP, INDEXER_WS } from "./config";
 
 export interface MarketInfo {
   market: string;
+  solUsd: number;
   collection: string;
   synthMint: string;
   status: string;

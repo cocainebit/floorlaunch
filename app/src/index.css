@@ -464,3 +464,14 @@ th.num, td.num { text-align: right; }
 }
 .lz-avail.ok { color: #58c76f; }
 .lz-avail.bad { color: #cfa73c; }
+
+.u-sub-val { display: block; font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+.lz-upload {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px;
+  width: 100%; background: #0f1c12; border: 1px dashed #2c4030; color: #9db3a0;
+  border-radius: 10px; padding: 12px 13px; font-size: 13.5px; cursor: pointer;
+}
+.lz-upload:hover { border-color: #3fae57; color: #cdd9cd; }
+.lz-upload-done { display: flex; align-items: center; gap: 10px; color: #cdd9cd; }
+.lz-upload-done img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; }
+.lz-links2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

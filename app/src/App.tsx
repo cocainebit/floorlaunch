@@ -18,7 +18,6 @@ import {
   type FundingTick,
   type ListingMeta,
 } from "./api";
-import { COLLECTION_META } from "./config";
 import { useFlWallet } from "./wallet";
 
 export default function App() {
@@ -105,22 +104,6 @@ export default function App() {
           </a>
         </nav>
         <div className="top-right">
-          <select
-            className="market-select"
-            value={selected ?? ""}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            {markets.map((m) => {
-              const l = listings[m.market];
-              const name = l?.name ?? COLLECTION_META[m.collection]?.name ?? m.market.slice(0, 8);
-              const tk = l?.ticker ?? COLLECTION_META[m.collection]?.ticker ?? "";
-              return (
-                <option key={m.market} value={m.market}>
-                  {name + " · " + tk}
-                </option>
-              );
-            })}
-          </select>
           <button
             className="wallet-btn"
             onClick={() => (wallet.connected ? wallet.disconnect() : wallet.connect())}
@@ -142,7 +125,6 @@ export default function App() {
         />
       ) : view === "launch" ? (
         <LaunchFlow
-          live={new Set(markets.map((m) => m.market))}
           listings={listings}
           onLaunched={(mkt) => {
             fetchListings().then(setListings).catch(() => {});

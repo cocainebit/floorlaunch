@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { pdas } from "../tx";
+import { RPC_URL } from "../wallet";
 import type { MarketInfo, Trade, FundingTick } from "../api";
 import { useFlWallet } from "../wallet";
 import { fetchPosition, repayBurn, type PositionView } from "../tx";
@@ -77,6 +80,63 @@ function Stats({ m, funding }: { m: MarketInfo; funding: FundingTick[] }) {
   );
 }
 
+function HoldersTab({ m }: { m: MarketInfo }) {
+  const [rows, setRows] = useState<
+    { address: string; tokens: number; label: string | null }[]
+  >([]);
+  const [supply, setSupply] = useState(0);
+
+  useEffect(() => {
+    const conn = new Connection(RPC_URL, "confirmed");
+    const p = pdas(new PublicKey(m.market));
+    (async () => {
+      try {
+        const sup = await conn.getTokenSupply(new PublicKey(m.synthMint));
+        setSupply(Number(sup.value.amount) / 1e6);
+        const largest = await conn.getTokenLargestAccounts(new PublicKey(m.synthMint));
+        const labels: Record<string, string> = {
+          [p.pool.toBase58()]: m.status === "live" ? "AMM pool" : "launch curve",
+          [p.treasury.toBase58()]: "hedge reserve",
+        };
+        setRows(
+          largest.value.slice(0, 10).map((h) => ({
+            address: h.address.toBase58(),
+            tokens: Number(h.amount) / 1e6,
+            label: labels[h.address.toBase58()] ?? null,
+          }))
+        );
+      } catch {}
+    })();
+  }, [m.market, m.status]);
+
+  // Value each holder's tokens in USD at the current mark (pool stays
+  // SOL-paired; USD is display-layer via the cached SOL price).
+  const perTokenUsd = m.markPerToken > 0 ? m.markPerToken * m.solUsd : (m.indexPerToken * m.solUsd);
+  return (
+    <div className="stats-grid">
+      {rows.map((h) => (
+        <div className="stat-row" key={h.address}>
+          <span className={h.label ? "" : "dim"}>
+            {h.label ?? `${h.address.slice(0, 6)}..${h.address.slice(-6)}`}
+            {h.label && (
+              <span className="chip chip-dim holder-chip">
+                {h.address.slice(0, 4)}..{h.address.slice(-4)}
+              </span>
+            )}
+          </span>
+          <span className="mono">
+            ${(h.tokens * perTokenUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            {supply > 0 && (
+              <span className="dim"> ({((h.tokens / supply) * 100).toFixed(1)}%)</span>
+            )}
+          </span>
+        </div>
+      ))}
+      {rows.length === 0 && <div className="empty-state">loading holders…</div>}
+    </div>
+  );
+}
+
 function PositionTab({ m }: { m: MarketInfo }) {
   const wallet = useFlWallet();
   const [pos, setPos] = useState<PositionView | null>(null);
@@ -149,7 +209,7 @@ export default function Panels({
   trades: Trade[];
   funding: FundingTick[];
 }) {
-  const [tab, setTab] = useState<"trades" | "stats" | "position">("trades");
+  const [tab, setTab] = useState<"trades" | "stats" | "holders" | "position">("trades");
   return (
     <div className="card panels-card">
       <div className="tab-row">
@@ -157,6 +217,7 @@ export default function Panels({
           [
             ["trades", "Recent trades"],
             ["stats", "Market stats"],
+            ["holders", "Holders"],
             ["position", "My position"],
           ] as const
         ).map(([id, label]) => (
@@ -171,6 +232,7 @@ export default function Panels({
       </div>
       {tab === "trades" && <TradesTable trades={trades} />}
       {tab === "stats" && <Stats m={m} funding={funding} />}
+      {tab === "holders" && <HoldersTab m={m} />}
       {tab === "position" && <PositionTab m={m} />}
     </div>
   );

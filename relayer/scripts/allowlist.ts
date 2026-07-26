@@ -30,7 +30,7 @@ const NFT = {
 const CARD = {
   minListings: 4,
   minFloorUsd: 100,
-  categories: ["Pokemon", "One Piece"],
+  categories: ["Pokemon", "One Piece", "Yu-Gi-Oh!", "Magic The Gathering", "Baseball", "Football", "Basketball", "Soccer", "Hockey"],
 };
 
 // Candidate universe for NFT discovery, pending a Tensor API key for a

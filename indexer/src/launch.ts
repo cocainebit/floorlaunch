@@ -13,7 +13,8 @@
 import * as anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 
 const LAMPORTS = 1e9;
@@ -60,17 +61,24 @@ async function solUsd(): Promise<number> {
   return Number(p.price) * Math.pow(10, p.expo);
 }
 
+export function catalogByIdentifier(identifier: string): any | undefined {
+  const catalog: any[] = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
+  return catalog.find((c) => c.identifier === identifier);
+}
+
 export async function devLaunch(
   rpcUrl: string,
   programId: string,
   idl: any,
-  body: { collectionId: string; meta: Omit<ListingMeta, "launchedAt" | "identifier"> }
+  body: { collectionId?: string; identifier?: string; meta: Omit<ListingMeta, "launchedAt" | "identifier"> }
 ): Promise<{ market: string; indexLamports: number }> {
   if (!rpcUrl.includes("127.0.0.1") && !rpcUrl.includes("localhost")) {
     throw new Error("dev launch is localnet-only");
   }
   const catalog: any[] = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
-  const u = catalog.find((c) => c.collectionId === body.collectionId);
+  const u = body.identifier
+    ? catalog.find((c) => c.identifier === body.identifier)
+    : catalog.find((c) => c.collectionId === body.collectionId);
   if (!u) throw new Error("unknown underlying");
 
   // Initial index in lamports per unit, from the allowlist snapshot.
@@ -90,15 +98,21 @@ export async function devLaunch(
   });
   const program = new anchor.Program(idl, provider);
   const pid = new PublicKey(programId);
-  const collection = new PublicKey(body.collectionId);
+  // Every launch gets its own market, even for the same underlying: the
+  // on-chain collection id is a fresh hash of identifier + entropy, and
+  // the underlying association lives in the listing metadata.
+  const collection = new PublicKey(
+    createHash("sha256")
+      .update(`${u.identifier}|${Date.now()}|${randomBytes(8).toString("hex")}`)
+      .digest()
+  );
   const [globalPda] = PublicKey.findProgramAddressSync([Buffer.from("global")], pid);
   const [marketPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("market"), collection.toBuffer()],
     pid
   );
 
-  const existing = await connection.getAccountInfo(marketPda);
-  if (!existing) {
+  {
     // Curve opens at the live index; deep virtuals keep launch premium sane.
     const vSol = 100n * BigInt(LAMPORTS);
     const vTok = (vSol * BASE_UNITS_PER_NFT) / BigInt(indexLamports);

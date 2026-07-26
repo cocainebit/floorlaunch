@@ -12,7 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
-import { devLaunch, loadListings } from "./launch.js";
+import { devLaunch, loadListings, catalogByIdentifier } from "./launch.js";
 import {
   getOrCreateEscrow,
   startVerification,
@@ -175,7 +175,43 @@ function candles(market: string, tfSecs: number, limit: number) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+
+// Uploaded token images (served for the app + listing metadata).
+const UPLOADS_DIR = new URL("../data/uploads", import.meta.url).pathname;
+mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOADS_DIR));
+
+app.post("/upload", (req, res) => {
+  try {
+    const { dataUrl } = req.body as { dataUrl: string };
+    const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/.exec(dataUrl ?? "");
+    if (!m) throw new Error("expected a base64 image data URL");
+    const buf = Buffer.from(m[2], "base64");
+    if (buf.length > 6_000_000) throw new Error("image too large (6MB max)");
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${m[1] === "jpeg" ? "jpg" : m[1]}`;
+    writeFileSync(`${UPLOADS_DIR}/${name}`, buf);
+    res.json({ url: `${req.protocol}://${req.get("host")}/uploads/${name}` });
+  } catch (e: any) {
+    res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
+
+// Cached SOL/USD for display-layer conversion (pools stay SOL-paired).
+let solUsdCache = { value: 0, at: 0 };
+async function getSolUsd(): Promise<number> {
+  if (Date.now() - solUsdCache.at < 120_000 && solUsdCache.value > 0) return solUsdCache.value;
+  try {
+    const r = await fetch(
+      "https://hermes.pyth.network/v2/updates/price/latest?ids[]=0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d&parsed=true"
+    );
+    const b: any = await r.json();
+    const p = b.parsed[0].price;
+    solUsdCache = { value: Number(p.price) * Math.pow(10, p.expo), at: Date.now() };
+  } catch {}
+  return solUsdCache.value;
+}
+getSolUsd();
 
 app.get("/listings", (_req, res) => res.json(loadListings()));
 
@@ -227,9 +263,11 @@ app.post("/dev/launch", async (req, res) => {
 app.get("/markets", async (_req, res) => {
   try {
     const accounts = await (program.account as any).market.all();
+    const solUsd = await getSolUsd();
     res.json(
       accounts.map((a: any) => ({
         market: a.publicKey.toBase58(),
+        solUsd,
         collection: a.account.collection.toBase58(),
         synthMint: a.account.synthMint.toBase58(),
         status: Object.keys(a.account.status)[0],
@@ -290,6 +328,51 @@ function broadcast(msg: any) {
 }
 
 initEscrow(idl);
+
+// Oracle refresher: keeps every launched market's feed fresh by re-pushing
+// the allowlist-derived index every 5 minutes (localnet stand-in for the
+// production relayer following the listings file).
+async function refreshOracles() {
+  try {
+    const { Keypair } = await import("@solana/web3.js");
+    const anchorMod = await import("@coral-xyz/anchor");
+    const { readFileSync } = await import("node:fs");
+    const { homedir } = await import("node:os");
+    const oracle = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(readFileSync(`${homedir()}/floorlaunch/relayer/keys/oracle-sim.json`, "utf8")))
+    );
+    const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(oracle), {
+      commitment: "confirmed",
+    });
+    const prog = new anchorMod.Program(structuredClone(idl), provider);
+    const [globalPda] = PublicKey.findProgramAddressSync([Buffer.from("global")], new PublicKey(PROGRAM_ID));
+    const listings = loadListings();
+    const solUsd = await getSolUsd();
+    for (const [market, meta] of Object.entries(listings)) {
+      try {
+        const u = catalogByIdentifier((meta as any).identifier);
+        if (!u) continue;
+        const lamports =
+          u.kind === "nft"
+            ? Math.round(u.snapshot.floorSol * 1e9)
+            : Math.round(((u.usdPrice ?? u.snapshot.ccFloorUsd) / solUsd) * 1e9);
+        if (!(lamports > 0)) continue;
+        await prog.methods
+          .pushIndex(new (await import("bn.js")).default(lamports))
+          .accountsPartial({
+            global: globalPda,
+            oracleAuthority: oracle.publicKey,
+            market: new PublicKey(market),
+          })
+          .signers([oracle])
+          .rpc();
+      } catch {}
+    }
+  } catch {}
+}
+setInterval(refreshOracles, 300_000);
+setTimeout(refreshOracles, 15_000);
+
 restore();
 subscribe();
 setInterval(persist, 15_000);

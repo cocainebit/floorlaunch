@@ -27,7 +27,7 @@ interface Underlying {
 }
 
 const STEPS = ["Intro", "Market", "Fee receiver", "Personalise", "Summary"] as const;
-const CATS = ["Pokemon", "One Piece", "NFT collections"] as const;
+const CATS = [...new Set((catalog as Underlying[]).map((u) => u.category))];
 const RESERVED = new Set(["SOL", "USDC", "BTC", "ETH", "FL", "FLOOR"]);
 
 const all = catalog as Underlying[];
@@ -48,6 +48,12 @@ function cleanTitle(u: Underlying): string {
   if (u.kind !== "card") return `${u.name} Floor`;
   const m = u.name.match(/#\S+\s+(.*?)\s+(?:PSA|CGC|BGS)\b/i);
   return `${(m ? m[1] : u.name).replace(/Full Art\//i, "").trim()} ${u.grade}`;
+}
+function collectiblePage(u: Underlying): string {
+  if (u.kind === "nft") return `https://magiceden.io/marketplace/${u.symbol}`;
+  return `https://collectorcrypt.com/marketplace?search=${encodeURIComponent(
+    u.name.split(/\s+(PSA|CGC)/)[0]
+  )}`;
 }
 const subLabel = (u: Underlying) =>
   u.kind === "card" ? cleanTitle(u).replace(/ PSA.*| CGC.*/, "") : u.name;
@@ -85,17 +91,15 @@ function AssetRow({
 }
 
 export default function LaunchFlow({
-  live,
   listings,
   onLaunched,
 }: {
-  live: Set<string>;
   listings: Record<string, ListingMeta>;
   onLaunched: (market: string) => void;
 }) {
   const wallet = useFlWallet();
   const [step, setStep] = useState(1); // index into STEPS: 1..4 active screens
-  const [cat, setCat] = useState<(typeof CATS)[number]>("Pokemon");
+  const [cat, setCat] = useState<string>(CATS[0]);
   const [sel, setSel] = useState<Underlying | null>(null);
 
   const [feeMode, setFeeMode] = useState<"me" | "address" | "x" | "youtube" | "elitefourum">("me");
@@ -104,7 +108,8 @@ export default function LaunchFlow({
   const [ticker, setTicker] = useState("");
   const [name, setName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [social, setSocial] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [links, setLinks] = useState({ twitter: "", website: "", discord: "", telegram: "" });
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,10 +136,6 @@ export default function LaunchFlow({
         : `${feeMode === "x" ? "X" : feeMode === "youtube" ? "YouTube" : "Elite Fourum"} @${feeValue.replace(/^@/, "")}`;
 
   function pick(u: Underlying) {
-    if (live.has(u.market)) {
-      onLaunched(u.market);
-      return;
-    }
     setSel(u);
     if (!ticker) setTicker(tickerFrom(u));
     if (!name) setName(cleanTitle(u));
@@ -161,12 +162,12 @@ export default function LaunchFlow({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          collectionId: sel.collectionId,
+          identifier: sel.identifier,
           meta: {
             ticker: `fl${ticker.toUpperCase()}`,
             name,
             image: imageUrl || sel.image,
-            links: { social, description },
+            links: { ...links, description, collectiblePage: collectiblePage(sel) },
             feeReceiver,
             launchedBy: wallet.publicKey.toBase58(),
           },
@@ -223,13 +224,6 @@ export default function LaunchFlow({
               ))}
             </div>
 
-            <div className="lz-section">MOST LIQUID</div>
-            <div className="lz-grid2">
-              {MOST_LIQUID.map((u) => (
-                <AssetRow key={u.identifier} u={u} selected={sel?.identifier === u.identifier} onClick={() => pick(u)} />
-              ))}
-            </div>
-
             <div className="lz-section">COLLECTIBLES</div>
             <div className="lz-pills">
               {CATS.map((c) => (
@@ -250,6 +244,13 @@ export default function LaunchFlow({
                     onClick={() => pick(u)}
                   />
                 ))}
+            </div>
+
+            <div className="lz-section">MOST LIQUID</div>
+            <div className="lz-grid2">
+              {MOST_LIQUID.map((u) => (
+                <AssetRow key={u.identifier} u={u} selected={sel?.identifier === u.identifier} onClick={() => pick(u)} />
+              ))}
             </div>
             <div className="lz-spacer" />
             <button className="lz-cta" disabled={!sel} onClick={() => setStep(2)}>
@@ -348,23 +349,62 @@ export default function LaunchFlow({
             </div>
             <div className="lz-field">
               <label>Image</label>
-              <input
-                className="lz-input"
-                placeholder={sel?.image ? "Card art (default) — or paste an image URL" : "Paste an image URL"}
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-              />
+              <label className="lz-upload">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setUploading(true);
+                    try {
+                      const dataUrl: string = await new Promise((res, rej) => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result as string);
+                        r.onerror = rej;
+                        r.readAsDataURL(f);
+                      });
+                      const up = await fetch(`${INDEXER_HTTP}/upload`, {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ dataUrl }),
+                      });
+                      const ub = await up.json();
+                      if (!up.ok) throw new Error(ub.error);
+                      setImageUrl(ub.url);
+                    } catch {}
+                    setUploading(false);
+                  }}
+                />
+                {imageUrl ? (
+                  <span className="lz-upload-done">
+                    <img src={imageUrl} alt="" /> Image uploaded — click to replace
+                  </span>
+                ) : uploading ? (
+                  "Uploading…"
+                ) : sel?.image ? (
+                  "Upload image (defaults to the card art)"
+                ) : (
+                  "Upload image"
+                )}
+              </label>
             </div>
             <div className="lz-field">
               <label>
-                Social Links <span className="lz-opt">(optional)</span>
+                Links <span className="lz-opt">(optional)</span>
               </label>
-              <input
-                className="lz-input"
-                placeholder="↗ Paste link — X, website..."
-                value={social}
-                onChange={(e) => setSocial(e.target.value)}
-              />
+              <div className="lz-links2">
+                {(["twitter", "website", "discord", "telegram"] as const).map((k) => (
+                  <input
+                    key={k}
+                    className="lz-input"
+                    placeholder={k}
+                    value={links[k]}
+                    onChange={(e) => setLinks({ ...links, [k]: e.target.value })}
+                  />
+                ))}
+              </div>
             </div>
             <div className="lz-field">
               <label>

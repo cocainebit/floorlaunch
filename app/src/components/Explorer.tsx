@@ -62,7 +62,9 @@ export default function Explorer({
     if (!q) return [];
     return markets.filter((m) => {
       const l = listings[m.market];
-      const u = (catalog as any[]).find((c) => c.collectionId === m.collection);
+      const u = (catalog as any[]).find(
+        (c) => c.identifier === l?.identifier || c.collectionId === m.collection
+      );
       return (
         m.synthMint.toLowerCase() === q ||
         m.market.toLowerCase() === q ||
@@ -116,7 +118,9 @@ export default function Explorer({
 
   const l = selected ? listings[selected.market] : undefined;
   const u = selected
-    ? (catalog as any[]).find((c) => c.collectionId === selected.collection)
+    ? (catalog as any[]).find(
+        (c) => c.identifier === l?.identifier || c.collectionId === selected.collection
+      )
     : undefined;
 
   const indexUnit = selected ? selected.indexPerToken * PER_UNIT : 0;
