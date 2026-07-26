@@ -127,7 +127,11 @@ async function main() {
   const pusher = makePusher(relayerCfg);
   await pushIndex(pusher, marketPda.toBase58(), baseIndex);
 
-  if (isFresh) {
+  // A resumed market can still be pre-graduation (e.g. after a validator
+  // state rollback); treat it like a fresh launch so trading can start.
+  const mNow: any = await (program.account as any).market.fetch(marketPda);
+  const needsLaunch = isFresh || "bootstrap" in mNow.status;
+  if (needsLaunch) {
     // Launch: several wallets buy through the curve, then graduate.
     const buyCurve = (kp: Keypair, sol: number) =>
       program.methods.curveBuy(new BN(Math.floor(sol * LAMPORTS_PER_SOL)), new BN(0))

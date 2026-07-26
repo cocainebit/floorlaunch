@@ -1,8 +1,10 @@
 /**
- * Launch wizard, long.xyz-shaped: three focused steps.
- *   1  Pick a collectible (launch a new token on top of it)
- *   2  Finalise your token (name + ticker with live availability)
- *   3  Review and launch
+ * Launch wizard, exact long.xyz structure adapted to collectibles:
+ *   1 Market        "Select a market" (featured / most liquid / categories)
+ *   2 Fee receiver  "Allocate fees to yourself or any creator"
+ *   3 Personalise   ticker, name, image, links, description
+ *   4 Summary       review cards + ticker availability + deploy
+ * Breadcrumb header shows prev/next step names with a progress underline.
  */
 import { useMemo, useState } from "react";
 import catalog from "../underlyings.json";
@@ -24,34 +26,63 @@ interface Underlying {
   snapshot: any;
 }
 
-const CATEGORIES = ["Pokemon", "One Piece", "NFT collections"] as const;
+const STEPS = ["Intro", "Market", "Fee receiver", "Personalise", "Summary"] as const;
+const CATS = ["Pokemon", "One Piece", "NFT collections"] as const;
 const RESERVED = new Set(["SOL", "USDC", "BTC", "ETH", "FL", "FLOOR"]);
 
-function suggestTicker(u: Underlying): string {
+const all = catalog as Underlying[];
+const byLiquidity = [...all].sort((a, b) => {
+  const va = a.kind === "nft" ? a.snapshot.weeklyVolSol ?? 0 : (a.snapshot.ccListings ?? 0) * 100;
+  const vb = b.kind === "nft" ? b.snapshot.weeklyVolSol ?? 0 : (b.snapshot.ccListings ?? 0) * 100;
+  return vb - va;
+});
+const FEATURED = byLiquidity.slice(0, 2);
+const MOST_LIQUID = byLiquidity.slice(2, 10);
+
+function tickerFrom(u: Underlying): string {
   const stop = new Set(["the", "of", "and", "full", "art", "ex", "gx", "v", "vmax", "psa"]);
   const words = u.name.split(/[^a-zA-Z]+/).filter((w) => w.length > 2 && !stop.has(w.toLowerCase()));
-  const w = (words.find((x) => /^[A-Z]/.test(x)) ?? words[0] ?? "TOKEN").toUpperCase();
-  return w.slice(0, 8);
+  return (words.find((x) => /^[A-Z]/.test(x)) ?? words[0] ?? "TOKEN").toUpperCase().slice(0, 8);
 }
-
 function cleanTitle(u: Underlying): string {
   if (u.kind !== "card") return `${u.name} Floor`;
   const m = u.name.match(/#\S+\s+(.*?)\s+(?:PSA|CGC|BGS)\b/i);
-  const title = (m ? m[1] : u.name).replace(/Full Art\//i, "").trim();
-  return `${title} ${u.grade}`;
+  return `${(m ? m[1] : u.name).replace(/Full Art\//i, "").trim()} ${u.grade}`;
 }
-
-function collectiblePage(u: Underlying): string {
-  if (u.kind === "nft") return `https://magiceden.io/marketplace/${u.symbol}`;
-  return `https://collectorcrypt.com/marketplace?search=${encodeURIComponent(
-    u.name.split(/\s+(PSA|CGC)/)[0]
-  )}`;
-}
-
-const priceLabel = (u: Underlying) =>
+const subLabel = (u: Underlying) =>
+  u.kind === "card" ? cleanTitle(u).replace(/ PSA.*| CGC.*/, "") : u.name;
+const priceOf = (u: Underlying) =>
   u.kind === "nft"
-    ? `${u.snapshot.floorSol} SOL floor · ${u.snapshot.listed} listed`
-    : `$${(u.usdPrice ?? u.snapshot.ccFloorUsd).toLocaleString()} · ${u.snapshot.ccListings} vaulted`;
+    ? `${u.snapshot.floorSol} SOL floor`
+    : `$${(u.usdPrice ?? u.snapshot.ccFloorUsd).toLocaleString()}`;
+
+function AssetRow({
+  u,
+  selected,
+  isNew,
+  onClick,
+}: {
+  u: Underlying;
+  selected: boolean;
+  isNew?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button className={`lz-asset ${selected ? "sel" : ""}`} onClick={onClick}>
+      {u.image ? (
+        <img src={u.image} alt="" className="lz-asset-img" />
+      ) : (
+        <div className="lz-asset-img lz-noart" />
+      )}
+      <div className="lz-asset-text">
+        <div className="lz-asset-ticker">{tickerFrom(u)}</div>
+        <div className="lz-asset-name">{subLabel(u).slice(0, 26)}</div>
+      </div>
+      {isNew && <span className="lz-new">NEW</span>}
+      {selected && <span className="lz-check">✓</span>}
+    </button>
+  );
+}
 
 export default function LaunchFlow({
   live,
@@ -63,30 +94,21 @@ export default function LaunchFlow({
   onLaunched: (market: string) => void;
 }) {
   const wallet = useFlWallet();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [cat, setCat] = useState<(typeof CATEGORIES)[number]>("Pokemon");
-  const [query, setQuery] = useState("");
+  const [step, setStep] = useState(1); // index into STEPS: 1..4 active screens
+  const [cat, setCat] = useState<(typeof CATS)[number]>("Pokemon");
   const [sel, setSel] = useState<Underlying | null>(null);
+
+  const [feeMode, setFeeMode] = useState<"me" | "address" | "x" | "youtube" | "elitefourum">("me");
+  const [feeValue, setFeeValue] = useState("");
 
   const [ticker, setTicker] = useState("");
   const [name, setName] = useState("");
-  const [showExtras, setShowExtras] = useState(false);
-  const [links, setLinks] = useState({ twitter: "", website: "", discord: "", telegram: "" });
-  const [feeMode, setFeeMode] = useState<"wallet" | "address" | "x" | "youtube" | "elitefourum">("wallet");
-  const [feeValue, setFeeValue] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [social, setSocial] = useState("");
+  const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const list = useMemo(
-    () =>
-      (catalog as Underlying[])
-        .filter((u) => u.category === cat)
-        .filter((u) => u.name.toLowerCase().includes(query.toLowerCase())),
-    [cat, query]
-  );
-
-  // Live ticker validation, long.xyz-style: letters only, bounded length,
-  // availability against every existing listing plus a reserved list.
   const takenTickers = useMemo(
     () => new Set(Object.values(listings).map((l) => l.ticker.replace(/^fl/, "").toUpperCase())),
     [listings]
@@ -96,26 +118,35 @@ export default function LaunchFlow({
     if (!/^[A-Za-z]+$/.test(ticker)) return { ok: false, msg: "Ticker must contain only letters" };
     if (ticker.length > 8) return { ok: false, msg: "Ticker must be 8 characters or less" };
     const t = ticker.toUpperCase();
-    if (RESERVED.has(t)) return { ok: false, msg: `fl${t} is reserved` };
-    if (takenTickers.has(t)) return { ok: false, msg: `fl${t} is already live` };
-    return { ok: true, msg: `fl${t} is available` };
+    if (RESERVED.has(t) || takenTickers.has(t))
+      return { ok: false, msg: "Reserved. Try another ticker." };
+    return { ok: true, msg: "Available" };
   }, [ticker, takenTickers]);
 
+  const feeLabel =
+    feeMode === "me"
+      ? `Me ${wallet.publicKey ? wallet.publicKey.toBase58().slice(0, 6) + "..." + wallet.publicKey.toBase58().slice(-4) : "(connect wallet)"}`
+      : feeMode === "address"
+        ? `Address ${feeValue.slice(0, 6)}...`
+        : `${feeMode === "x" ? "X" : feeMode === "youtube" ? "YouTube" : "Elite Fourum"} @${feeValue.replace(/^@/, "")}`;
+
   function pick(u: Underlying) {
+    if (live.has(u.market)) {
+      onLaunched(u.market);
+      return;
+    }
     setSel(u);
-    setTicker(suggestTicker(u));
-    setName(cleanTitle(u));
-    setError(null);
-    setStep(2);
+    if (!ticker) setTicker(tickerFrom(u));
+    if (!name) setName(cleanTitle(u));
   }
 
-  async function launch() {
+  async function deploy() {
     if (!sel || !wallet.publicKey) return;
     setBusy(true);
     setError(null);
     try {
       const feeReceiver = await (async () => {
-        if (feeMode === "wallet") return { kind: "wallet", value: wallet.publicKey!.toBase58() };
+        if (feeMode === "me") return { kind: "wallet", value: wallet.publicKey!.toBase58() };
         if (feeMode === "address") return { kind: "address", value: feeValue };
         const er = await fetch(`${INDEXER_HTTP}/escrow`, {
           method: "POST",
@@ -134,8 +165,8 @@ export default function LaunchFlow({
           meta: {
             ticker: `fl${ticker.toUpperCase()}`,
             name,
-            image: sel.image,
-            links: { ...links, collectiblePage: collectiblePage(sel) },
+            image: imageUrl || sel.image,
+            links: { social, description },
             feeReceiver,
             launchedBy: wallet.publicKey.toBase58(),
           },
@@ -150,240 +181,265 @@ export default function LaunchFlow({
     setBusy(false);
   }
 
-  const stepper = (
-    <div className="wizard-steps">
-      {(
-        [
-          [1, "Pick a collectible"],
-          [2, "Finalise your token"],
-          [3, "Review & launch"],
-        ] as const
-      ).map(([n, label]) => (
-        <button
-          key={n}
-          className={`wizard-step ${step === n ? "active" : ""} ${step > n ? "done" : ""}`}
-          onClick={() => n < step && setStep(n)}
-        >
-          <span className="wizard-num">{step > n ? "✓" : n}</span> {label}
-        </button>
-      ))}
+  const canNext =
+    step === 1 ? !!sel : step === 2 ? feeMode === "me" || !!feeValue : step === 3 ? tickerState.ok && !!name : true;
+
+  const header = (
+    <div className="lz-nav">
+      <button
+        className="lz-nav-side"
+        onClick={() => step > 1 && setStep(step - 1)}
+        style={{ visibility: step >= 1 ? "visible" : "hidden" }}
+      >
+        <span className="lz-chev">‹</span> {STEPS[step - 1]}
+      </button>
+      <button
+        className="lz-nav-side lz-nav-next"
+        onClick={() => canNext && step < 4 && setStep(step + 1)}
+        style={{ visibility: step < 4 ? "visible" : "hidden" }}
+      >
+        {STEPS[step + 1]} <span className="lz-chev">›</span>
+      </button>
+      <div className="lz-progress">
+        <div className="lz-progress-fill" style={{ width: `${(step / 4) * 100}%` }} />
+      </div>
     </div>
   );
 
-  // ---------- step 1: pick ----------
-  if (step === 1) {
-    return (
-      <div className="launch-shell">
-        {stepper}
-        <div className="wizard-hero">
-          <div className="launch-title">Pick a collectible.</div>
-          <div className="dim wizard-sub">
-            Launch a new token on top of it. Every listed collectible has a live price feed; your
-            token tracks it from block one.
-          </div>
-        </div>
-        <div className="wizard-controls">
-          <div className="cat-tabs">
-            {CATEGORIES.map((c) => (
-              <button key={c} className={`tab-btn ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
-                {c} ({(catalog as Underlying[]).filter((u) => u.category === c).length})
-              </button>
-            ))}
-          </div>
-          <input
-            className="amount-input search-input"
-            placeholder="Search cards and collections…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="under-grid">
-          {list.map((u) => {
-            const launched = live.has(u.market);
-            return (
-              <button
-                key={u.identifier}
-                className={`under-tile card ${launched ? "launched" : ""}`}
-                onClick={() => (launched ? onLaunched(u.market) : pick(u))}
-              >
-                {u.image ? (
-                  <img src={u.image} alt={u.name} loading="lazy" />
-                ) : (
-                  <div className="under-noart dim">no art</div>
-                )}
-                <div className="under-name">{u.name}</div>
-                <div className="under-sub dim">{u.kind === "card" ? u.grade : "collection floor"}</div>
-                <div className="under-price mono">{priceLabel(u)}</div>
-                {launched && <span className="chip chip-ok live-chip">Live · trade</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  return (
+    <div className="lz-shell">
+      <div className="lz-col">
+        {header}
 
-  if (!sel) {
-    return null;
-  }
+        {step === 1 && (
+          <>
+            <div className="lz-title">Select a market</div>
+            <div className="lz-sub">Choose the collectible that anchors your floorlaunch token</div>
 
-  // ---------- step 2: finalise ----------
-  if (step === 2) {
-    return (
-      <div className="launch-shell">
-        {stepper}
-        <div className="wizard-hero">
-          <div className="launch-title">Finalise your token.</div>
-          <div className="dim wizard-sub">Name it, claim a ticker, and optionally add links.</div>
-        </div>
-        <div className="wizard-body">
-          <div className="wizard-anchor card">
-            {sel.image && <img className="launch-art" src={sel.image} alt={sel.name} />}
-            <div className="launch-under-name">{cleanTitle(sel)}</div>
-            <div className="dim launch-under-sub">
-              {sel.kind === "card" ? `${sel.grade} · ${sel.category}` : "NFT collection floor"}
+            <div className="lz-section">FEATURED</div>
+            <div className="lz-grid2">
+              {FEATURED.map((u) => (
+                <AssetRow key={u.identifier} u={u} selected={sel?.identifier === u.identifier} onClick={() => pick(u)} />
+              ))}
             </div>
-            <div className="mono launch-under-price">{priceLabel(sel)}</div>
-            <button className="back-link" onClick={() => setStep(1)}>← change collectible</button>
-          </div>
 
-          <div className="launch-form card">
-            <label className="field-label">Token name</label>
-            <input
-              className="amount-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={48}
-            />
-            <label className="field-label" style={{ marginTop: 12 }}>Ticker</label>
-            <div className="ticker-row">
-              <span className="ticker-prefix mono">fl</span>
-              <input
-                className="amount-input ticker-input mono"
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                maxLength={8}
-                placeholder="BIRDS"
-              />
+            <div className="lz-section">MOST LIQUID</div>
+            <div className="lz-grid2">
+              {MOST_LIQUID.map((u) => (
+                <AssetRow key={u.identifier} u={u} selected={sel?.identifier === u.identifier} onClick={() => pick(u)} />
+              ))}
             </div>
-            <div className={`ticker-check ${tickerState.ok ? "ok" : "bad"}`}>{tickerState.msg}</div>
 
-            <button className="extras-toggle" onClick={() => setShowExtras(!showExtras)}>
-              {showExtras ? "▾" : "▸"} Links & creator fees (optional)
-            </button>
-            {showExtras && (
-              <div className="extras-body">
-                <div className="form-row2">
-                  {(["twitter", "website", "discord", "telegram"] as const).map((k) => (
-                    <input
-                      key={k}
-                      className="amount-input link-input"
-                      placeholder={k}
-                      value={links[k]}
-                      onChange={(e) => setLinks({ ...links, [k]: e.target.value })}
-                    />
-                  ))}
-                </div>
-                <label className="field-label">Creator fee receiver</label>
-                <div className="fee-modes">
-                  {(
-                    [
-                      ["wallet", "My wallet"],
-                      ["address", "Address"],
-                      ["x", "X"],
-                      ["youtube", "YouTube"],
-                      ["elitefourum", "Elite Fourum"],
-                    ] as const
-                  ).map(([k, label]) => (
-                    <button
-                      key={k}
-                      className={`fee-mode ${feeMode === k ? "active" : ""}`}
-                      onClick={() => setFeeMode(k)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {feeMode !== "wallet" && (
-                  <input
-                    className="amount-input"
-                    placeholder={
-                      feeMode === "address"
-                        ? "Solana address"
-                        : feeMode === "youtube"
-                          ? "channel handle (without @)"
-                          : feeMode === "elitefourum"
-                            ? "forum username"
-                            : "@handle"
-                    }
-                    value={feeValue}
-                    onChange={(e) => setFeeValue(e.target.value)}
+            <div className="lz-section">COLLECTIBLES</div>
+            <div className="lz-pills">
+              {CATS.map((c) => (
+                <button key={c} className={`lz-pill ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div className="lz-grid2">
+              {all
+                .filter((u) => u.category === cat)
+                .map((u, i) => (
+                  <AssetRow
+                    key={u.identifier}
+                    u={u}
+                    selected={sel?.identifier === u.identifier}
+                    isNew={i < 2}
+                    onClick={() => pick(u)}
                   />
-                )}
-                {["x", "youtube", "elitefourum"].includes(feeMode) && (
-                  <div className="dim form-note">
-                    Their fee share accrues to a keyless on-chain escrow until they verify
-                    ownership and claim. Launch for any creator; they collect when they show up.
+                ))}
+            </div>
+            <div className="lz-spacer" />
+            <button className="lz-cta" disabled={!sel} onClick={() => setStep(2)}>
+              CONTINUE
+            </button>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="lz-title">Fee receiver</div>
+            <div className="lz-sub">Allocate fees to yourself or any creator</div>
+            <div className="lz-bigspace" />
+            <div className="lz-segments">
+              {(
+                [
+                  ["me", "Me"],
+                  ["address", "Address"],
+                  ["x", "X account"],
+                  ["youtube", "YouTube"],
+                  ["elitefourum", "Elite Fourum"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`lz-segment ${feeMode === k ? "active" : ""}`}
+                  onClick={() => setFeeMode(k)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {feeMode === "me" ? (
+              <div className="lz-fee-card">
+                <div>
+                  <div className="lz-fee-title">Me</div>
+                  <div className="lz-fee-sub">
+                    {wallet.publicKey
+                      ? `${wallet.publicKey.toBase58().slice(0, 6)}...${wallet.publicKey.toBase58().slice(-4)}`
+                      : "no wallet connected"}
                   </div>
+                </div>
+                <span className="lz-chip">Connected wallet</span>
+              </div>
+            ) : (
+              <div className="lz-fee-card lz-fee-input-card">
+                <input
+                  className="lz-input lz-fee-input"
+                  placeholder={
+                    feeMode === "address"
+                      ? "Solana address"
+                      : feeMode === "youtube"
+                        ? "channel handle"
+                        : feeMode === "elitefourum"
+                          ? "forum username"
+                          : "@handle"
+                  }
+                  value={feeValue}
+                  onChange={(e) => setFeeValue(e.target.value)}
+                />
+                {feeMode !== "address" && (
+                  <span className="lz-chip lz-chip-dim">escrow until verified</span>
                 )}
               </div>
             )}
-
-            <button
-              className="cta buy wizard-next"
-              disabled={!tickerState.ok || !name}
-              onClick={() => setStep(3)}
-            >
-              {tickerState.ok && name ? "Continue" : "Complete the fields to continue"}
+            <div className="lz-spacer" />
+            <button className="lz-cta" disabled={!canNext} onClick={() => setStep(3)}>
+              CONTINUE
             </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+          </>
+        )}
 
-  // ---------- step 3: review & launch ----------
-  return (
-    <div className="launch-shell">
-      {stepper}
-      <div className="wizard-hero">
-        <div className="launch-title">Review & launch.</div>
-        <div className="dim wizard-sub">
-          One transaction. The curve opens at the collectible's live price.
-        </div>
-      </div>
-      <div className="wizard-body">
-        <div className="wizard-anchor card">
-          {sel.image && <img className="launch-art" src={sel.image} alt={sel.name} />}
-          <div className="launch-under-name">{cleanTitle(sel)}</div>
-          <div className="mono launch-under-price">{priceLabel(sel)}</div>
-          <a className="derived-link" href={collectiblePage(sel)} target="_blank" rel="noreferrer">
-            View on {sel.kind === "nft" ? "Magic Eden" : "Collector Crypt"} ↗
-          </a>
-        </div>
-        <div className="launch-form card">
-          <div className="params-preview">
-            <div className="row"><span>Token</span><span className="mono">{name}</span></div>
-            <div className="row"><span>Ticker</span><span className="mono">fl{ticker.toUpperCase()}</span></div>
-            <div className="row"><span>Anchored to</span><span className="mono">{sel.kind === "card" ? "graded card price" : "collection floor"}</span></div>
-            <div className="row"><span>Trading fee</span><span className="mono">0.70% per swap</span></div>
-            <div className="row"><span>Creator fee share</span><span className="mono">
-              {feeMode === "wallet" ? "your wallet" : feeMode === "address" ? "custom address" : `${feeMode}: ${feeValue || "?"}`}
-            </span></div>
-            <div className="row"><span>Graduation</span><span className="mono">10 SOL raised</span></div>
-            <div className="row"><span>Launch price</span><span className="mono">at the live index</span></div>
-            <div className="row"><span>Hedge reserve</span><span className="mono">100M tokens</span></div>
-          </div>
-          {wallet.connected ? (
-            <button className="cta buy wizard-next" onClick={launch} disabled={busy}>
-              {busy ? "Launching…" : `Launch fl${ticker.toUpperCase()}`}
+        {step === 3 && (
+          <>
+            <div className="lz-title">Personalise</div>
+            <div className="lz-sub">Add a ticker, name, image and links</div>
+            <div className="lz-bigspace" />
+            <div className="lz-field">
+              <label>Ticker</label>
+              <div className="lz-ticker-wrap">
+                <span className="lz-ticker-fl">fl</span>
+                <input
+                  className="lz-input lz-ticker"
+                  value={ticker}
+                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                  maxLength={8}
+                />
+              </div>
+              {ticker && (
+                <div className={`lz-hint ${tickerState.ok ? "ok" : "bad"}`}>{tickerState.msg}</div>
+              )}
+            </div>
+            <div className="lz-field">
+              <label>Name</label>
+              <input className="lz-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={48} />
+            </div>
+            <div className="lz-field">
+              <label>Image</label>
+              <input
+                className="lz-input"
+                placeholder={sel?.image ? "Card art (default) — or paste an image URL" : "Paste an image URL"}
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+              />
+            </div>
+            <div className="lz-field">
+              <label>
+                Social Links <span className="lz-opt">(optional)</span>
+              </label>
+              <input
+                className="lz-input"
+                placeholder="↗ Paste link — X, website..."
+                value={social}
+                onChange={(e) => setSocial(e.target.value)}
+              />
+            </div>
+            <div className="lz-field">
+              <label>
+                Description <span className="lz-opt">(optional)</span>
+              </label>
+              <textarea
+                className="lz-input lz-textarea"
+                value={description}
+                maxLength={100}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+              <div className="lz-counter">{description.length}/100</div>
+            </div>
+            <div className="lz-spacer" />
+            <button className="lz-cta" disabled={!canNext} onClick={() => setStep(4)}>
+              FINALISE YOUR TOKEN
             </button>
-          ) : (
-            <button className="cta buy wizard-next" onClick={wallet.connect}>Connect wallet</button>
-          )}
-          {error && <div className="tx-note err">{error}</div>}
-          <button className="back-link" onClick={() => setStep(2)}>← back</button>
-        </div>
+          </>
+        )}
+
+        {step === 4 && sel && (
+          <>
+            <div className="lz-title">Summary</div>
+            <div className="lz-sub">Review your floorlaunch launch</div>
+            <div className="lz-bigspace" />
+
+            <div className="lz-review-label">Your asset:</div>
+            <div className="lz-review-card">
+              {(imageUrl || sel.image) && <img className="lz-review-img" src={imageUrl || sel.image!} alt="" />}
+              <div className="lz-review-text">
+                <div className="lz-review-main">$fl{ticker.toUpperCase()}</div>
+                <div className="lz-review-line">{name}</div>
+                {description && <div className="lz-review-line lz-dim">{description}</div>}
+              </div>
+              <button className="lz-edit" onClick={() => setStep(3)}>✎</button>
+            </div>
+
+            <div className="lz-review-label">Anchored to:</div>
+            <div className="lz-review-card">
+              {sel.image && <img className="lz-review-img lz-review-art" src={sel.image} alt="" />}
+              <div className="lz-review-text">
+                <div className="lz-review-main">{cleanTitle(sel)}</div>
+                <div className="lz-review-line">
+                  {sel.kind === "card" ? `${sel.category} · ${priceOf(sel)}` : `NFT floor · ${priceOf(sel)}`}
+                </div>
+              </div>
+              <button className="lz-edit" onClick={() => setStep(1)}>✎</button>
+            </div>
+
+            <div className="lz-review-label">Fee receiver</div>
+            <div className="lz-review-card lz-review-thin">
+              <div className="lz-review-line">
+                <b>{feeLabel}</b>
+              </div>
+              <button className="lz-edit" onClick={() => setStep(2)}>✎</button>
+            </div>
+
+            <div className="lz-review-label">Ticker availability</div>
+            <div className={`lz-avail ${tickerState.ok ? "ok" : "bad"}`}>
+              {tickerState.ok ? `$fl${ticker.toUpperCase()} is available.` : tickerState.msg}
+            </div>
+
+            <div className="lz-spacer" />
+            {wallet.connected ? (
+              <button className="lz-cta" disabled={busy || !tickerState.ok} onClick={deploy}>
+                {busy ? "DEPLOYING…" : "DEPLOY"}
+              </button>
+            ) : (
+              <button className="lz-cta" onClick={wallet.connect}>
+                CONNECT WALLET
+              </button>
+            )}
+            {error && <div className="lz-hint bad" style={{ marginTop: 10 }}>{error}</div>}
+          </>
+        )}
       </div>
     </div>
   );
