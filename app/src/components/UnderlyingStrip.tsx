@@ -21,8 +21,15 @@ export default function UnderlyingStrip({
       }
     : base;
   const indexUnit = m.indexPerToken * PER_UNIT;
-  const markUnit = m.markPerToken * PER_UNIT;
-  const premium = indexUnit > 0 ? ((markUnit - indexUnit) / indexUnit) * 100 : 0;
+  // Pre-trade curve markets have no mark EMA; quote the curve's spot.
+  const markUnit =
+    m.markPerToken > 0
+      ? m.markPerToken * PER_UNIT
+      : m.curveVirtualTokens > 0
+        ? (m.curveVirtualSol / m.curveVirtualTokens) * PER_UNIT
+        : 0;
+  const premium =
+    indexUnit > 0 && markUnit > 0 ? ((markUnit - indexUnit) / indexUnit) * 100 : null;
   // Feed freshness from the indexer's wall-clock ingestion time; the raw
   // on-chain timestamp lags on localnet where the validator clock drifts.
   const age = m.feedAgeSec ?? Math.floor(Date.now() / 1000 - m.indexLastTs);
@@ -57,9 +64,8 @@ export default function UnderlyingStrip({
         </div>
         <div className="u-stat">
           <div className="u-label">Premium</div>
-          <div className={`u-value ${premium >= 0 ? "up" : "down"}`}>
-            {premium >= 0 ? "+" : ""}
-            {premium.toFixed(2)}%
+          <div className={`u-value ${(premium ?? 0) >= 0 ? "up" : "down"}`}>
+            {premium === null ? "–" : `${premium >= 0 ? "+" : ""}${premium.toFixed(2)}%`}
           </div>
         </div>
         <div className="u-stat">
