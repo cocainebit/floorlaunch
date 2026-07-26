@@ -731,6 +731,40 @@ pub mod floorlaunch {
         Ok(())
     }
 
+    /// Release an identity fee escrow. The escrow is a program-derived
+    /// system account seeded by the hash of the identity (e.g.
+    /// sha256("youtube:pokerev")); fees for unverified identities
+    /// accumulate there via plain transfers. No key exists for it: funds
+    /// can only leave through this admin-signed instruction after
+    /// off-chain ownership verification, to the verified wallet.
+    pub fn release_escrow(
+        ctx: Context<ReleaseEscrow>,
+        id_hash: [u8; 32],
+        amount: Option<u64>,
+    ) -> Result<()> {
+        let bal = ctx.accounts.escrow.lamports();
+        let amount = amount.unwrap_or(bal).min(bal);
+        require!(amount > 0, Err::ZeroAmount);
+        let seeds: &[&[u8]] = &[b"escrow", id_hash.as_ref(), &[ctx.bumps.escrow]];
+        system_program::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.escrow.to_account_info(),
+                    to: ctx.accounts.recipient.clone(),
+                },
+                &[seeds],
+            ),
+            amount,
+        )?;
+        emit!(EscrowReleased {
+            id_hash,
+            recipient: ctx.accounts.recipient.key(),
+            amount,
+        });
+        Ok(())
+    }
+
     pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
         let m = &mut ctx.accounts.market;
         require!(amount > 0 && amount <= m.fee_lamports, Err::InsufficientVaultFunds);
@@ -931,6 +965,13 @@ pub struct FundingAccrued {
     pub funding_index_lo: u64,
     pub mark: u64,
     pub index: u64,
+}
+
+#[event]
+pub struct EscrowReleased {
+    pub id_hash: [u8; 32],
+    pub recipient: Pubkey,
+    pub amount: u64,
 }
 
 #[event]
@@ -1248,6 +1289,20 @@ pub struct ClosePosition<'info> {
     pub position: Account<'info, ShortPosition>,
     #[account(mut)]
     pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_hash: [u8; 32])]
+pub struct ReleaseEscrow<'info> {
+    #[account(seeds = [b"global"], bump = global.bump, has_one = admin)]
+    pub global: Account<'info, Global>,
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [b"escrow", id_hash.as_ref()], bump)]
+    pub escrow: SystemAccount<'info>,
+    /// CHECK: verified wallet chosen after off-chain identity proof.
+    #[account(mut)]
+    pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]

@@ -1,31 +1,27 @@
 /**
- * Identity fee escrow: fees for launches whose fee receiver is a social
- * identity (an X handle, a YouTube channel, an Elite Fourum user) accrue
- * to a server-held escrow keypair until the identity proves ownership,
- * then sweep to their wallet.
+ * Identity fee escrow, program-PDA edition.
+ *
+ * Each identity (an X handle, a YouTube channel, an Elite Fourum user)
+ * maps to a program-derived system account seeded by
+ * sha256("platform:handle"). No key exists for it anywhere: fees for
+ * unverified identities accumulate via plain transfers, and funds can
+ * only leave through the program's admin-signed release_escrow
+ * instruction, invoked here after ownership verification.
  *
  * Verification is nonce-in-bio: we issue a nonce, the owner puts it in
  * their public bio/description, we fetch and check. Per-platform:
  *   youtube      channel page description (public fetch)
  *   elitefourum  Discourse public user JSON (bio_raw)
  *   x            no public bio API; manual/admin approval until X OAuth
- *                credentials exist
- *
- * Escrow keys live server-side (data/escrows.json). In production this
- * moves to a KMS + a program-owned escrow PDA; the interface stays.
  */
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  sendAndConfirmTransaction,
-} from "@solana/web3.js";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import * as anchor from "@coral-xyz/anchor";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { homedir } from "node:os";
 
 const STORE = new URL("../data/escrows.json", import.meta.url).pathname;
+const ADMIN_KEY = `${homedir()}/.config/solana/id.json`;
 
 export type Platform = "x" | "youtube" | "elitefourum";
 
@@ -33,7 +29,6 @@ export interface EscrowEntry {
   platform: Platform;
   handle: string;
   escrowPubkey: string;
-  escrowSecret: number[];
   createdAt: number;
   verified: boolean;
   verifiedWallet?: string;
@@ -43,6 +38,8 @@ export interface EscrowEntry {
 }
 
 const key = (p: Platform, h: string) => `${p}:${h.toLowerCase().replace(/^@/, "")}`;
+const idHash = (p: Platform, h: string) =>
+  createHash("sha256").update(key(p, h)).digest();
 
 function load(): Record<string, EscrowEntry> {
   try {
@@ -54,26 +51,36 @@ function load(): Record<string, EscrowEntry> {
 const save = (d: Record<string, EscrowEntry>) =>
   writeFileSync(STORE, JSON.stringify(d, null, 2));
 
-/** Public view: never expose the secret. */
-const pub = ({ escrowSecret, ...rest }: EscrowEntry) => rest;
+let programId: PublicKey | null = null;
+let cachedIdl: any = null;
+export function initEscrow(idl: any) {
+  cachedIdl = structuredClone(idl);
+  programId = new PublicKey(idl.address);
+}
+
+export function escrowAddress(platform: Platform, handle: string): PublicKey {
+  if (!programId) throw new Error("escrow module not initialized");
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("escrow"), idHash(platform, handle)],
+    programId
+  )[0];
+}
 
 export function getOrCreateEscrow(platform: Platform, handle: string) {
   const d = load();
   const k = key(platform, handle);
   if (!d[k]) {
-    const kp = Keypair.generate();
     d[k] = {
       platform,
       handle: handle.replace(/^@/, ""),
-      escrowPubkey: kp.publicKey.toBase58(),
-      escrowSecret: [...kp.secretKey],
+      escrowPubkey: escrowAddress(platform, handle).toBase58(),
       createdAt: Math.floor(Date.now() / 1000),
       verified: false,
       sweeps: [],
     };
     save(d);
   }
-  return pub(d[k]);
+  return d[k];
 }
 
 export function startVerification(platform: Platform, handle: string, wallet: string) {
@@ -123,8 +130,7 @@ export async function checkVerification(
   opts: { adminOverride?: boolean } = {}
 ) {
   const d = load();
-  const k = key(platform, handle);
-  const e = d[k];
+  const e = d[key(platform, handle)];
   if (!e) throw new Error("no escrow for this identity");
   if (!e.nonce || !e.pendingWallet) throw new Error("verification not started");
 
@@ -147,31 +153,40 @@ export async function checkVerification(
   return { verified: true, wallet: e.verifiedWallet, sweep };
 }
 
-/** Move the escrow's SOL (minus fee headroom) to the verified wallet. */
+/** Release the escrow PDA to the verified wallet via the program. */
 export async function sweepEscrow(rpcUrl: string, platform: Platform, handle: string) {
   const d = load();
   const e = d[key(platform, handle)];
   if (!e?.verified || !e.verifiedWallet) throw new Error("not verified");
+  if (!cachedIdl) throw new Error("escrow module not initialized");
+
   const connection = new Connection(rpcUrl, "confirmed");
-  const kp = Keypair.fromSecretKey(Uint8Array.from(e.escrowSecret));
-  const bal = await connection.getBalance(kp.publicKey);
-  // The escrow signs and pays the 5000-lamport fee; sweep everything else
-  // so the account closes to zero (dust below rent-exemption is invalid).
-  const amount = bal - 5_000;
-  if (amount <= 0) return { swept: 0 };
-  const tx = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey: kp.publicKey,
-      toPubkey: new PublicKey(e.verifiedWallet),
-      lamports: amount,
-    })
+  const escrow = escrowAddress(platform, e.handle);
+  const bal = await connection.getBalance(escrow);
+  if (bal <= 0) return { swept: 0 };
+
+  const admin = Keypair.fromSecretKey(
+    Uint8Array.from(JSON.parse(readFileSync(ADMIN_KEY, "utf8")))
   );
-  const sig = await sendAndConfirmTransaction(connection, tx, [kp]);
-  e.sweeps.push({ sig, lamports: amount, at: Math.floor(Date.now() / 1000) });
+  const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(admin), {
+    commitment: "confirmed",
+  });
+  const program = new anchor.Program(cachedIdl, provider);
+  const [globalPda] = PublicKey.findProgramAddressSync([Buffer.from("global")], programId!);
+  const sig = await program.methods
+    .releaseEscrow(Array.from(idHash(platform, e.handle)) as any, null)
+    .accountsPartial({
+      global: globalPda,
+      admin: admin.publicKey,
+      escrow,
+      recipient: new PublicKey(e.verifiedWallet),
+    })
+    .rpc();
+  e.sweeps.push({ sig, lamports: bal, at: Math.floor(Date.now() / 1000) });
   save(d);
-  return { swept: amount / 1e9, sig };
+  return { swept: bal / 1e9, sig };
 }
 
 export function listEscrows() {
-  return Object.fromEntries(Object.entries(load()).map(([k, v]) => [k, pub(v)]));
+  return load();
 }

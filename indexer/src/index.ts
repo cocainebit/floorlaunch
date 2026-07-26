@@ -18,6 +18,7 @@ import {
   startVerification,
   checkVerification,
   listEscrows,
+  initEscrow,
   type Platform,
 } from "./escrow.js";
 
@@ -288,6 +289,7 @@ function broadcast(msg: any) {
   for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(s);
 }
 
+initEscrow(idl);
 restore();
 subscribe();
 setInterval(persist, 15_000);

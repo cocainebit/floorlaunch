@@ -273,3 +273,32 @@ th.num, td.num { text-align: right; }
 .curve-bar { height: 6px; background: var(--bg); border-radius: 3px; margin-top: 8px; overflow: hidden; }
 .curve-fill { height: 100%; background: var(--index); border-radius: 3px; transition: width 0.4s ease; }
 .graduate-btn { margin-top: 10px; }
+
+/* ---------- explorer ---------- */
+.explorer-search { width: 380px; }
+.explorer-matches { display: flex; flex-direction: column; gap: 8px; max-width: 720px; }
+.match-row {
+  display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center;
+  padding: 12px 14px; cursor: pointer; text-align: left; color: var(--ink);
+  font-family: var(--sans); font-size: 13px;
+}
+.match-row:hover { border-color: var(--index); }
+.explorer-result { display: grid; grid-template-columns: 1fr 300px; gap: 12px; align-items: start; }
+.explorer-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.explorer-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; flex-wrap: wrap; gap: 12px; }
+.explorer-token-img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+.explorer-addrs { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.copyable {
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--ink-2);
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer;
+}
+.copyable:hover { color: var(--ink); }
+.explorer-pool, .explorer-holders, .explorer-trades { padding: 14px 16px; }
+.explorer-pool .stats-grid, .explorer-holders .stats-grid, .explorer-trades .stats-grid { padding: 8px 0 0; }
+.holder-chip { margin-left: 8px; }
+.explorer-side { display: flex; flex-direction: column; gap: 12px; }
+.collectible-card { padding: 16px; text-align: center; }
+.collectible-art { width: 100%; border-radius: 8px; margin: 6px 0 10px; }
+.collectible-stats { padding: 10px 0; text-align: left; }
+.social-links { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
+.social-links a { text-decoration: none; }

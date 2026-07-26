@@ -5,6 +5,7 @@ import HedgePanel from "./components/HedgePanel";
 import UnderlyingStrip from "./components/UnderlyingStrip";
 import Panels from "./components/Panels";
 import LaunchFlow from "./components/LaunchFlow";
+import Explorer from "./components/Explorer";
 import {
   fetchMarkets,
   fetchTrades,
@@ -22,7 +23,7 @@ import { useFlWallet } from "./wallet";
 
 export default function App() {
   const wallet = useFlWallet();
-  const [view, setView] = useState<"markets" | "launch">("markets");
+  const [view, setView] = useState<"markets" | "launch" | "explorer">("markets");
   const [listings, setListings] = useState<Record<string, ListingMeta>>({});
   const [markets, setMarkets] = useState<MarketInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -93,6 +94,12 @@ export default function App() {
           >
             Launch
           </span>
+          <span
+            className={`nav-item ${view === "explorer" ? "active" : ""}`}
+            onClick={() => setView("explorer")}
+          >
+            Explorer
+          </span>
           <a className="nav-item" href="http://localhost:3333" target="_blank" rel="noreferrer">
             Docs
           </a>
@@ -124,7 +131,16 @@ export default function App() {
         </div>
       </header>
 
-      {view === "launch" ? (
+      {view === "explorer" ? (
+        <Explorer
+          markets={markets}
+          listings={listings}
+          onTrade={(mkt) => {
+            setSelected(mkt);
+            setView("markets");
+          }}
+        />
+      ) : view === "launch" ? (
         <LaunchFlow
           live={new Set(markets.map((m) => m.market))}
           onLaunched={(mkt) => {

@@ -20,7 +20,7 @@ function program(provider: anchor.AnchorProvider): anchor.Program {
   return new anchor.Program(idl as any, provider);
 }
 
-function pdas(market: PublicKey, owner?: PublicKey) {
+export function pdas(market: PublicKey, owner?: PublicKey) {
   const [mint] = PublicKey.findProgramAddressSync(
     [Buffer.from("mint"), market.toBuffer()],
     PROGRAM_ID

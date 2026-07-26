@@ -738,6 +738,53 @@ describe("floorlaunch", () => {
     );
   });
 
+  it("holds and releases an identity fee escrow PDA", async () => {
+    const idHash = Array.from(
+      require("crypto").createHash("sha256").update("youtube:testbreaker").digest()
+    );
+    const [escrowPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("escrow"), Buffer.from(idHash)],
+      program.programId
+    );
+    // Fees accrue via plain transfers from anyone.
+    const fund = SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: escrowPda,
+      lamports: 3 * SOL,
+    });
+    await provider.sendAndConfirm(new (require("@solana/web3.js").Transaction)().add(fund));
+    assert.equal(await connection.getBalance(escrowPda), 3 * SOL);
+
+    // Only the admin can release, and only via the instruction.
+    const recipient = Keypair.generate().publicKey;
+    try {
+      await program.methods
+        .releaseEscrow(idHash as any, null)
+        .accountsPartial({
+          global: globalPda,
+          admin: shorter.publicKey,
+          escrow: escrowPda,
+          recipient,
+        })
+        .signers([shorter])
+        .rpc();
+      assert.fail("should have thrown");
+    } catch (e: any) {
+      assert.include(e.toString(), "ConstraintHasOne");
+    }
+    await program.methods
+      .releaseEscrow(idHash as any, null)
+      .accountsPartial({
+        global: globalPda,
+        admin: payer.publicKey,
+        escrow: escrowPda,
+        recipient,
+      })
+      .rpc();
+    assert.equal(await connection.getBalance(escrowPda), 0);
+    assert.equal(await connection.getBalance(recipient), 3 * SOL);
+  });
+
   it("lets the admin withdraw accumulated fees", async () => {
     const m = await market();
     assert.isTrue(m.feeLamports.gt(new BN(0)));
