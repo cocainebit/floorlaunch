@@ -10,11 +10,13 @@ export interface MarketInfo {
   indexPerToken: number;
   markPerToken: number;
   indexLastTs: number;
+  feedAgeSec: number | null;
   ammSolReserve: number;
   ammTokenReserve: number;
   insuranceSol: number;
   totalCollateralSol: number;
   curveSolRaised: number;
+  fundingIndex: string;
   maxOpenInterest: number;
 }
 

@@ -15,7 +15,10 @@ export default function UnderlyingStrip({ m }: { m: MarketInfo }) {
   const indexUnit = m.indexPerToken * PER_UNIT;
   const markUnit = m.markPerToken * PER_UNIT;
   const premium = indexUnit > 0 ? ((markUnit - indexUnit) / indexUnit) * 100 : 0;
-  const fresh = Date.now() / 1000 - m.indexLastTs < 120;
+  // Feed freshness from the indexer's wall-clock ingestion time; the raw
+  // on-chain timestamp lags on localnet where the validator clock drifts.
+  const age = m.feedAgeSec ?? Math.floor(Date.now() / 1000 - m.indexLastTs);
+  const fresh = age < 120;
 
   return (
     <div className="card underlying-strip">
@@ -55,7 +58,7 @@ export default function UnderlyingStrip({ m }: { m: MarketInfo }) {
           <div className="u-label">Oracle</div>
           <div className="u-value">
             <span className={`dot ${fresh ? "ok" : "stale"}`} />
-            {ago(m.indexLastTs)}
+            {age < 60 ? `${age}s ago` : age < 3600 ? `${Math.floor(age / 60)}m ago` : `${Math.floor(age / 3600)}h ago`}
           </div>
         </div>
         <div className="u-stat">

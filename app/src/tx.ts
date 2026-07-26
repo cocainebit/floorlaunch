@@ -1,0 +1,196 @@
+/**
+ * Program transaction builders. All instruction accounts resolve from the
+ * market PDA and the connected wallet; amounts arrive in UI units and are
+ * converted here.
+ */
+import * as anchor from "@coral-xyz/anchor";
+import BN from "bn.js";
+import { PublicKey } from "@solana/web3.js";
+import idl from "./idl.json";
+
+const PROGRAM_ID = new PublicKey((idl as any).address);
+const LAMPORTS = 1e9;
+const TOKEN_BASE = 1e6; // 6 decimals
+
+export interface TxResult {
+  sig: string;
+}
+
+function program(provider: anchor.AnchorProvider): anchor.Program {
+  return new anchor.Program(idl as any, provider);
+}
+
+function pdas(market: PublicKey, owner?: PublicKey) {
+  const [mint] = PublicKey.findProgramAddressSync(
+    [Buffer.from("mint"), market.toBuffer()],
+    PROGRAM_ID
+  );
+  const [pool] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool"), market.toBuffer()],
+    PROGRAM_ID
+  );
+  const [treasury] = PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury"), market.toBuffer()],
+    PROGRAM_ID
+  );
+  const [vault] = PublicKey.findProgramAddressSync(
+    [Buffer.from("vault"), market.toBuffer()],
+    PROGRAM_ID
+  );
+  const short = owner
+    ? PublicKey.findProgramAddressSync(
+        [Buffer.from("short"), market.toBuffer(), owner.toBuffer()],
+        PROGRAM_ID
+      )[0]
+    : undefined;
+  return { mint, pool, treasury, vault, short };
+}
+
+export async function ammBuy(
+  provider: anchor.AnchorProvider,
+  market: string,
+  solIn: number,
+  minTokensOut: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.ammBuy(
+      new BN(Math.floor(solIn * LAMPORTS)),
+      new BN(Math.floor(minTokensOut * TOKEN_BASE))
+    )
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      poolToken: p.pool,
+      solVault: p.vault,
+      user: provider.wallet.publicKey,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function ammSell(
+  provider: anchor.AnchorProvider,
+  market: string,
+  tokensIn: number,
+  minSolOut: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.ammSell(
+      new BN(Math.floor(tokensIn * TOKEN_BASE)),
+      new BN(Math.floor(minSolOut * LAMPORTS))
+    )
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      poolToken: p.pool,
+      solVault: p.vault,
+      user: provider.wallet.publicKey,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function openShort(
+  provider: anchor.AnchorProvider,
+  market: string,
+  collateralSol: number,
+  drawTokens: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const owner = provider.wallet.publicKey;
+  const p = pdas(m, owner);
+  const sig = await program(provider)
+    .methods.openShort(
+      new BN(Math.floor(collateralSol * LAMPORTS)),
+      new BN(Math.floor(drawTokens * TOKEN_BASE))
+    )
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      treasury: p.treasury,
+      solVault: p.vault,
+      position: p.short!,
+      owner,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function repayBurn(
+  provider: anchor.AnchorProvider,
+  market: string,
+  tokens: number
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const owner = provider.wallet.publicKey;
+  const p = pdas(m, owner);
+  const sig = await program(provider)
+    .methods.repayBurn(new BN(Math.floor(tokens * TOKEN_BASE)))
+    .accountsPartial({
+      market: m,
+      synthMint: p.mint,
+      treasury: p.treasury,
+      position: p.short!,
+      owner,
+    })
+    .rpc();
+  return { sig };
+}
+
+export interface PositionView {
+  tokenBalance: number;
+  collateralSol: number;
+  debtTokens: number;
+  crPct: number | null;
+  liqIndexSolPerUnit: number | null;
+}
+
+/** Read the wallet's synth balance and short position for a market. */
+export async function fetchPosition(
+  provider: anchor.AnchorProvider,
+  market: string,
+  indexPerToken: number,
+  fundingIndex: string,
+  maintenanceCrBps = 12000
+): Promise<PositionView> {
+  const m = new PublicKey(market);
+  const owner = provider.wallet.publicKey;
+  const p = pdas(m, owner);
+  const prog = program(provider);
+
+  let tokenBalance = 0;
+  try {
+    const ata = anchor.utils.token.associatedAddress({
+      mint: p.mint,
+      owner,
+    });
+    const bal = await provider.connection.getTokenAccountBalance(ata);
+    tokenBalance = Number(bal.value.amount) / TOKEN_BASE;
+  } catch {}
+
+  let collateralSol = 0;
+  let debtTokens = 0;
+  try {
+    const pos: any = await (prog.account as any).shortPosition.fetch(p.short!);
+    collateralSol = Number(pos.collateral) / LAMPORTS;
+    debtTokens =
+      Number((BigInt(pos.debtScaled.toString()) * BigInt(fundingIndex)) / 1_000_000_000_000n) /
+      TOKEN_BASE;
+  } catch {}
+
+  // Debt value in SOL at the current index; CR and the index level (SOL
+  // per unit) at which the position hits maintenance.
+  const debtValueSol = debtTokens * indexPerToken;
+  const crPct = debtValueSol > 0 ? (collateralSol / debtValueSol) * 100 : null;
+  const debtUnits = debtTokens / TOKEN_BASE;
+  const liqIndexSolPerUnit =
+    debtUnits > 0
+      ? collateralSol / (debtUnits * (maintenanceCrBps / 10000))
+      : null;
+
+  return { tokenBalance, collateralSol, debtTokens, crPct, liqIndexSolPerUnit };
+}

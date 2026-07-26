@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MarketInfo, Trade, FundingTick } from "../api";
+import { useFlWallet } from "../wallet";
+import { fetchPosition, repayBurn, type PositionView } from "../tx";
 
 const PER_UNIT = 1_000_000;
 
@@ -75,6 +77,69 @@ function Stats({ m, funding }: { m: MarketInfo; funding: FundingTick[] }) {
   );
 }
 
+function PositionTab({ m }: { m: MarketInfo }) {
+  const wallet = useFlWallet();
+  const [pos, setPos] = useState<PositionView | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = () => {
+    if (!wallet.provider) return;
+    fetchPosition(wallet.provider, m.market, m.indexPerToken, m.fundingIndex)
+      .then(setPos)
+      .catch(() => {});
+  };
+  useEffect(refresh, [wallet.connected, m.market, m.indexPerToken]);
+
+  if (!wallet.connected) {
+    return (
+      <div className="empty-state">
+        Connect a wallet to see your balance, hedge position, collateral
+        ratio, and claimable exits.
+      </div>
+    );
+  }
+  if (!pos) return <div className="empty-state">Loading position…</div>;
+
+  const rows: [string, string][] = [
+    ["Token balance", `${pos.tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`],
+    ["Floor exposure", `${(pos.tokenBalance / 1e6).toFixed(4)} units`],
+    ["Hedge collateral", `${pos.collateralSol.toFixed(3)} SOL`],
+    ["Hedge debt", `${pos.debtTokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`],
+    ["Collateral ratio", pos.crPct ? `${pos.crPct.toFixed(1)}%` : "–"],
+    ["Liquidation index", pos.liqIndexSolPerUnit ? `${pos.liqIndexSolPerUnit.toFixed(2)} SOL per unit` : "–"],
+  ];
+
+  async function repayAll() {
+    if (!wallet.provider || !pos || pos.debtTokens <= 0) return;
+    setBusy(true);
+    try {
+      await repayBurn(
+        wallet.provider,
+        m.market,
+        Math.min(pos.debtTokens, pos.tokenBalance)
+      );
+      refresh();
+    } catch {}
+    setBusy(false);
+  }
+
+  return (
+    <div className="stats-grid">
+      {rows.map(([k, v]) => (
+        <div className="stat-row" key={k}>
+          <span className="dim">{k}</span>
+          <span className={`mono ${k === "Collateral ratio" && pos.crPct && pos.crPct < 135 ? "warn" : ""}`}>{v}</span>
+        </div>
+      ))}
+      {pos.debtTokens > 0 && (
+        <button className="cta neutral" onClick={repayAll} disabled={busy}>
+          {busy ? "Confirming…" : "Repay from balance"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Panels({
   m,
   trades,
@@ -106,12 +171,7 @@ export default function Panels({
       </div>
       {tab === "trades" && <TradesTable trades={trades} />}
       {tab === "stats" && <Stats m={m} funding={funding} />}
-      {tab === "position" && (
-        <div className="empty-state">
-          Connect a wallet to see your balance, hedge position, collateral
-          ratio, and claimable exits.
-        </div>
-      )}
+      {tab === "position" && <PositionTab m={m} />}
     </div>
   );
 }

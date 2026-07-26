@@ -181,6 +181,12 @@ app.get("/markets", async (_req, res) => {
         indexPerToken: Number(a.account.indexTwap) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
         markPerToken: Number(a.account.markEma) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
         indexLastTs: Number(a.account.indexLastTs),
+        feedAgeSec: (() => {
+          const ticks = store(a.publicKey.toBase58()).index;
+          return ticks.length
+            ? Math.floor(Date.now() / 1000) - ticks[ticks.length - 1].ts
+            : null;
+        })(),
         ammSolReserve: Number(a.account.ammSolReserve) / LAMPORTS_PER_SOL,
         ammTokenReserve: Number(a.account.ammTokenReserve) / BASE_UNITS_PER_TOKEN,
         insuranceSol: Number(a.account.insuranceLamports) / LAMPORTS_PER_SOL,

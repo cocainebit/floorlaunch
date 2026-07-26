@@ -167,6 +167,18 @@ body {
 .cta.sell { background: var(--down); }
 .cta.neutral { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
 .cta:disabled { opacity: 0.55; cursor: not-allowed; }
+.tx-note {
+  margin-top: 10px; font-size: 11.5px; padding: 7px 10px;
+  border-radius: 6px; background: var(--surface-2); color: var(--ink-2);
+  line-height: 1.4; word-break: break-all;
+}
+.tx-note.ok { color: var(--up); background: rgba(46, 163, 111, 0.1); }
+.tx-note.err { color: var(--down); background: rgba(229, 83, 75, 0.1); }
+
+/* wallet-adapter modal: match the app shell */
+.wallet-adapter-modal-wrapper { background: var(--surface) !important; }
+.wallet-adapter-button-trigger { background: var(--index) !important; }
+
 .claim-strip {
   margin-top: 14px; padding: 10px 12px; border-radius: 8px;
   background: rgba(63, 127, 196, 0.08); border: 1px solid rgba(63, 127, 196, 0.25);

@@ -15,8 +15,10 @@ import {
   type FundingTick,
 } from "./api";
 import { COLLECTION_META } from "./config";
+import { useFlWallet } from "./wallet";
 
 export default function App() {
+  const wallet = useFlWallet();
   const [markets, setMarkets] = useState<MarketInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -89,8 +91,12 @@ export default function App() {
               </option>
             ))}
           </select>
-          <button className="wallet-btn" disabled title="Ships with devnet deploy">
-            Connect wallet
+          <button
+            className="wallet-btn"
+            onClick={() => (wallet.connected ? wallet.disconnect() : wallet.connect())}
+            title={wallet.connected ? "Click to disconnect" : "Connect a Solana wallet"}
+          >
+            {wallet.label}
           </button>
         </div>
       </header>
