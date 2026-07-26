@@ -1,0 +1,9 @@
+node_modules/
+target/
+dist/
+.anchor/
+test-ledger/
+relayer/keys/
+indexer/data/
+*.log
+.DS_Store

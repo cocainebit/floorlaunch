@@ -1,0 +1,117 @@
+---
+title: "Attack Vectors"
+description: "Threat model: known attacks, what they cost, worst-case damage, and the mitigations in place."
+---
+
+The design goal is not "manipulation is impossible" but "manipulation is expensive,
+slow, and bounded". The load-bearing property: **no instruction pays out pooled
+third-party funds at the oracle price**. A bad index can tilt flows; it cannot open a
+drain. Attacks below are ordered roughly by how often this category of protocol has
+been killed by them.
+
+## Summary table
+
+| Attack | Cost to attacker | Worst case | Primary mitigations |
+| --- | --- | --- | --- |
+| Oracle print manipulation | High (move real markets) | Bounded funding tilt, skewed CR checks | Multi-source median, MAD rejection, sanity band, breaker, funding clamp |
+| Shill sales on source venues | Marketplace fees (~13% per print) plus days of prints | Same as above, harder | Recency-weighted median, cross-source gate, listing policy |
+| Compromised oracle key | Key theft | Per-window index moves capped by breaker; markets freeze | `breaker_bps` freeze, EMA, key rotation |
+| AMM mark manipulation | Real swap losses against the pool | Funding tilted for the EMA window | Mark EMA, mark only drives funding, CR uses index |
+| Synthetic market outgrows reference | Capital at scale | Index loses meaning | Finite per-market hedge reserve, depth-gated listing |
+| Math and accounting edges | Engineering effort | Depends on bug | u128 fixed point, checked subtraction, tracked vault fields |
+| Liquidation griefing | Varies | Unfair liquidation of a solvent short | CR computed on index TWAP, not spot or mark |
+
+## Oracle print manipulation
+
+**Attack**: push the index up (profit long or force liquidations) or down (draw
+reserve synth cheap) by feeding the price feed service (the relayer) bad prices.
+
+**Why it is hard**: the estimator uses medians across independent venues with MAD
+outlier rejection, capitalized bids floor the estimate while free-to-fake asks only cap
+it, and a cross-source disagreement beyond about 15 percent halts pushes entirely
+(see [Card Pipeline](/oracle/card-pipeline)). Whatever leaks through hits the on-chain
+EMA (partial absorption), the [circuit breaker](/concepts/circuit-breaker) (freeze on
+deviant prints), and the [funding clamp](/concepts/funding) (bounded daily flow).
+
+**Worst case**: a small, slow funding tilt and marginally shifted collateral checks
+until detected. Not a drain.
+
+## Shill sales on source venues
+
+**Attack**: sell the card to yourself at inflated prices on eBay to walk the median up.
+
+**Cost**: roughly 13 percent in marketplace fees per print, several prints spread over
+days to move a 14-day MAD-filtered median, on a card whose organic sale flow dilutes
+yours. Then the cross-source gate still compares eBay against tokenized venues.
+Listing policy (mid-tier cards with real volume, not pop-8 grails) is the final
+multiplier on cost.
+
+## Compromised oracle key
+
+**Attack**: steal the relayer key and push arbitrary prices.
+
+**Bound**: any push deviating more than `breaker_bps` from the TWAP freezes the market
+instead of entering the index, so the attacker can move the index at most
+`breaker_bps` per `index_window_secs` window before everything halts, and once frozen
+the market refuses further pushes entirely, so the TWAP cannot be walked while the
+admin investigates. The admin rotates the key with
+[`set_oracle_authority`](/reference/instructions#set_oracle_authority). The oracle key
+holds no funds and no admin powers.
+
+On external-venue markets the same key also pushes the mark
+([`push_mark`](/reference/instructions#push_mark)), which has no breaker by design:
+the mark only steers funding, so an absurd pushed mark is bounded by the
+[funding clamp](/concepts/funding) to a slow, capped flow, the same blast radius the
+key already has through the index. Collateral and liquidation math never read the
+mark.
+
+The inverse failure (a silenced relayer, whether killed or key-revoked) is bounded by
+the [staleness guard](/concepts/price-index#staleness-guard): past
+`max_index_age_secs` the last price stops being trusted and index-priced operations
+halt, so suppressing the feed is not a way to freeze a favorable price into the
+market.
+
+## AMM mark manipulation
+
+**Attack**: swap hard against the internal AMM to distort the mark price and farm
+funding.
+
+**Bound**: funding reads `mark_ema`, never spot, so a single-block push decays over
+`mark_window_secs` while the attacker holds a losing AMM position the whole time.
+The mark influences **only** funding; collateral ratio and liquidation checks read the
+oracle index exclusively. This is why nftperp-style "manipulate mark, drain via
+liquidations" does not map onto this design.
+
+## Outgrowing the reference (tail wags dog)
+
+**Attack**: not an attack so much as a failure mode. If total short debt (open
+interest, in derivatives terms) dwarfs the real collectible market, the index
+stops disciplining anything.
+
+**Bound**: the hedge reserve (`max_open_interest`) caps total CDP debt per
+market, sized at listing against real market depth. Listing is admin-gated on
+depth criteria in v1.
+
+## Math and accounting
+
+All value math runs in u128 with explicit scaling constants (`BASE_UNITS_PER_NFT`,
+`FUNDING_ONE`), constant-product outputs round in the pool's favor, subtraction is
+checked where reserves could underflow, and the single lamport vault is partitioned by
+tracked fields (`insurance_lamports`, `fee_lamports`, curve, AMM, and collateral
+totals). This does not substitute for an audit; see [Risks](/security/risks).
+
+**Supply-side surface is eliminated by construction.** The mint authority is revoked
+at market creation (internal venue) or never held (external venue), so no bug, admin
+key, or compromised program upgrade path can inflate supply. The only market-signed
+token movements are the curve/AMM pool transfers and the treasury reserve draws and
+returns, each gated by the instructions documented in the
+[reference](/reference/instructions); the one burn in the system (unsold curve
+allocation at graduation) can only shrink supply.
+
+## Liquidation griefing
+
+**Attack**: briefly distort a price to liquidate a solvent short.
+
+**Bound**: liquidation eligibility is computed against the index TWAP, which a spot
+distortion cannot reach without first surviving the oracle pipeline and breaker. The
+AMM mark, which is easier to move, plays no role in the collateral check.

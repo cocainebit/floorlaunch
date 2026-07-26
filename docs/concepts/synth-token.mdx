@@ -1,0 +1,83 @@
+---
+title: "The Synth Token"
+description: "Unit math, fixed supply with a revoked mint, and what backs each tranche"
+---
+
+Each market issues one SPL token, the **synth**. It is a completely standard SPL mint: it sits in associated token accounts, transfers freely, and composes with any wallet or protocol that speaks SPL. What makes it a synthetic is not the token itself but the machinery around it.
+
+## Fixed supply, mint revoked
+
+Every floorlaunch token is a **fixed-supply SPL token with a revoked mint authority**, on both venues.
+
+On the internal venue:
+
+- The mint lives at a program-derived address (seeds `["mint", market]`), so each market has exactly one deterministic mint address; see [PDAs](/reference/pdas).
+- `create_market` premints the entire allocation in the creation transaction: the curve allocation (`curve_virtual_tokens`) into the pool account and the hedging reserve (`max_open_interest`) into the treasury, then **permanently revokes the mint authority** (`SetAuthority` to none). Wallets and screeners show the mint as revoked from the first block.
+- Nothing can ever mint again. After creation, tokens only move between accounts, and the one burn in the system (unsold curve allocation at [graduation](/concepts/graduation)) means supply can only shrink.
+- Decimals: 6.
+
+On the external venue the mint is whatever the external launch (Meteora DBC) created, recorded as `Market.synth_mint`; supply is likewise fixed and the program holds no mint authority. See [What backs each tranche](#what-backs-each-tranche) below and [Venues](/concepts/amm#venues).
+
+<Note>
+The hedging facility is a preminted supply allocation, like a locked reserve in any launch's tokenomics. It is not an inflation mechanism: drawing from it moves existing tokens into circulation, and repayments move them back out.
+</Note>
+
+## Unit math
+
+The scale constant for every market:
+
+```text
+1 underlying unit (one floor NFT, one graded card) = 1,000,000 tokens
+                                                   = 1e12 base units
+```
+
+Since the [Price Index](/concepts/price-index) is quoted in lamports per whole unit:
+
+```text
+index_per_base_unit = index_lamports / 1e12
+value(base_units)   = base_units * index_lamports / 1e12
+```
+
+Worked example: a 100 SOL floor makes the index `1e11` lamports. One token (1e6 base units) is then worth `1e11 * 1e6 / 1e12 = 1e5` lamports, or 0.0001 SOL. The million-to-one split keeps the per-token price in memecoin territory while the unit stays a whole NFT or card.
+
+## Where circulating supply comes from
+
+Total supply is fixed at creation; what moves is how much of it circulates. Every path is a transfer between program accounts and wallets:
+
+| Path | Direction | When |
+| --- | --- | --- |
+| `curve_buy` | pool allocation to buyer | Bootstrap phase |
+| `curve_sell` | seller back to pool allocation | Bootstrap phase |
+| `graduate` | pool keeps the AMM seed, **burns the unsold excess** | once |
+| `open_short` | treasury reserve to shorter | Live, against SOL collateral |
+| `repay_burn` | shorter back to treasury reserve | Live, retiring CDP debt |
+| `liquidate` | liquidator back to treasury reserve | Live, retiring a defaulted position's debt |
+
+AMM swaps move existing tokens between the pool and traders; nothing in the live market changes supply.
+
+Both venues run the identical CDP path: `open_short` draws from `["treasury", market]`, while `repay_burn` and `liquidate` return tokens to it. The treasury balance is the market's physical open-interest ceiling (`TreasuryDepleted`). On the internal venue the reserve is preminted at creation; on the external venue it is funded by a plain SPL transfer at listing time.
+
+Post-graduation supply on the internal venue is exactly:
+
+```text
+supply = tokens sold on the curve + AMM seed + hedging reserve
+```
+
+## What backs each tranche
+
+The circulating supply has two economically distinct tranches:
+
+1. **Curve and AMM supply**: tokens sold on the curve plus the graduation pool seed. These are backed by the SOL sitting in the market vault (the raise and the AMM reserve), like any launchpad token. Sellers exit against that SOL through the pool.
+2. **CDP supply**: tokens drawn from the treasury reserve by `open_short`. Every one of these is backed by a specific shorter's SOL collateral at no less than `initial_cr_bps` (150% by default) of index value at draw time, defended by [liquidations](/concepts/liquidations) below `maintenance_cr_bps`.
+
+<Note>
+The tranches are fungible in your wallet; a token does not know which path released it. The distinction matters for reasoning about system solvency: CDP supply has a named debtor who must buy it back or be liquidated, curve supply does not.
+</Note>
+
+## Why the reserve valve matters
+
+The treasury paths are the price tether's muscles. When the synth trades above the index, drawing new circulating supply from the reserve at index value via `open_short` and selling it is profitable, which adds circulating supply and pushes the price down. When it trades below, shorts buy back cheap and `repay_burn`, which pulls supply out of circulation and pushes the price up. [Funding](/concepts/funding) pays whichever side the tether needs more of.
+
+<Note>
+The reserve, sized at creation (internal venue) or funded at listing time (external venue), bounds how much tether pressure the market can exert. When it is empty the facility is full: that is the open-interest ceiling enforced by arithmetic. See [Parameters](/concepts/parameters).
+</Note>

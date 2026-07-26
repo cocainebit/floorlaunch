@@ -1,0 +1,81 @@
+---
+title: "Risk Disclosure"
+description: "An honest accounting of what can go wrong for users of floorlaunch."
+---
+
+<Warning>
+floorlaunch v1 is **unaudited and not deployed to any public network**. Everything on
+this page should be read as applying to a pre-release system. Do not size positions
+you cannot afford to lose.
+</Warning>
+
+## The peg is soft
+
+The synth is tethered to the index by arbitrage incentives and a
+[clamped funding rate](/concepts/funding), not by redemption at oracle price.
+Funding pulls the market price toward the index; it does not nail it there. Expect a
+persistent basis of a few percent, wider in volatile stretches. If you buy the synth
+expecting tick-for-tick tracking of the underlying, you have misunderstood the
+product; see [How It Works](/how-it-works).
+
+## Oracle risk is bounded, not zero
+
+The index comes from the price feed, an off-chain relayer service signing with a single authority key.
+The program bounds what a bad or malicious print can do (EMA smoothing,
+[circuit breaker](/concepts/circuit-breaker), funding clamp, no oracle-priced
+redemption), but bounded damage is still damage: a skewed index can tilt funding
+against you or shift collateral checks. A dead relayer degrades the market to a safe
+mode: past `max_index_age_secs` the [staleness
+guard](/concepts/price-index#staleness-guard) blocks new shorts, withdrawals against
+debt, funding, and liquidations until the feed resumes, though trading and repaying
+stay open and a long outage still leaves positions unmanageable in the interim.
+Details in [Attack Vectors](/security/attack-vectors) and
+[Relayer Operations](/oracle/operations).
+
+## Shorts can be liquidated
+
+Opening a short is levered exposure to the underlying rising. If the index moves up
+enough that your collateral ratio falls below `maintenance_cr_bps`, anyone may
+[liquidate](/concepts/liquidations) you: your debt is cleared against your collateral,
+a bonus goes to the liquidator, and in a deep move you can lose your entire
+collateral. Underlying markets (cards especially) can gap on news with no intraday
+price path to react to.
+
+## The insurance fund is finite
+
+Liquidation shortfalls are covered by a per-market
+[insurance fund](/concepts/insurance-fund) seeded at graduation. It can be exhausted.
+Past that point, shortfalls are unabsorbed and the market's solvency depends on
+remaining overcollateralization.
+
+## Admin powers (v1 centralization)
+
+In v1 a single admin key can: list markets, freeze and unfreeze any market, update
+parameters, rotate the oracle authority, and withdraw accumulated protocol fees.
+The oracle authority is a second trusted key. There is no governance, no timelock,
+and no multisig requirement enforced by the program. Until that changes (see
+[Roadmap](/roadmap)), users are trusting the operator not to misuse these powers,
+for example by freezing a market at a hostile moment or pushing parameters that
+disadvantage open positions.
+
+## Smart contract risk
+
+The program handles pooled lamports and a preminted token reserve with nontrivial
+fixed point math (funding indexes, EMA, constant product curves). It has a passing
+test suite and no audit. Bugs in money-handling code are the historical cause of most
+protocol losses in this category.
+
+## Regulatory posture
+
+A token that provides synthetic exposure to an external asset's price, with a
+collateralized short side and liquidations, resembles a derivatives venue in most
+jurisdictions. Nothing here is legal advice; users and operators should assess their
+own exposure.
+
+## Thin underlyings
+
+The whole design assumes the reference market is deep relative to the synthetic
+market. Listing policy and [hedge-reserve sizing](/concepts/parameters) enforce that
+assumption, but an underlying can thin out after listing (a card falls out of favor,
+a collection dies). A stale, thin reference makes every number downstream of the
+index less meaningful.

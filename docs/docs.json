@@ -1,0 +1,85 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "floorlaunch",
+  "description": "Launchpad for funding-pegged synthetic tokens tracking collectible markets: graded trading cards and NFT collection floors. No custody, no vault.",
+  "theme": "mint",
+  "icons": {
+    "library": "lucide"
+  },
+  "colors": {
+    "primary": "#10B981",
+    "dark": "#10B981",
+    "light": "#34D399"
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": {
+        "dark": "min-dark",
+        "light": "min-light"
+      }
+    }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": ["index", "how-it-works", "asset-classes", "glossary"]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/price-index",
+          "concepts/launch-curve",
+          "concepts/graduation",
+          "concepts/amm",
+          "concepts/synth-token",
+          "concepts/shorts",
+          "concepts/funding",
+          "concepts/liquidations",
+          "concepts/insurance-fund",
+          "concepts/circuit-breaker",
+          "concepts/parameters"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/going-long",
+          "guides/hedging",
+          "guides/running-a-liquidator",
+          "guides/listing-a-market"
+        ]
+      },
+      {
+        "group": "Oracle & Relayer",
+        "pages": [
+          "oracle/architecture",
+          "oracle/card-pipeline",
+          "oracle/nft-pipeline",
+          "oracle/operations"
+        ]
+      },
+      {
+        "group": "Program Reference",
+        "pages": [
+          "reference/pdas",
+          "reference/accounts",
+          "reference/instructions",
+          "reference/events",
+          "reference/errors"
+        ]
+      },
+      {
+        "group": "Security",
+        "pages": ["security/risks", "security/attack-vectors"]
+      },
+      {
+        "group": "Project",
+        "pages": ["roadmap", "faq"]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {}
+  }
+}

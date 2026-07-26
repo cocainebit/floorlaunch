@@ -1,0 +1,30 @@
+export const INDEXER_HTTP = "http://127.0.0.1:8787";
+export const INDEXER_WS = "ws://127.0.0.1:8787/ws";
+
+/** Per-collection presentation metadata, keyed by on-chain collection id. */
+export const COLLECTION_META: Record<
+  string,
+  { name: string; ticker: string; image: string; underlying: string; venue: string }
+> = {
+  "9vMk6PCT4BtZxxxHJXm6r3vF9KRDRVZXfV7ZxSRXdT3m": {
+    name: "Mad Lads",
+    ticker: "flMAD",
+    image: "https://madlads.s3.us-west-2.amazonaws.com/images/7863.png",
+    underlying: "NFT floor",
+    venue: "Magic Eden",
+  },
+};
+
+export const FALLBACK_META = {
+  name: "Unknown market",
+  ticker: "fl???",
+  image: "",
+  underlying: "collectible",
+  venue: "oracle",
+};
+
+export const COLORS = {
+  up: "#2ea36f",
+  down: "#e5534b",
+  index: "#3f7fc4",
+};

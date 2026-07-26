@@ -1,0 +1,107 @@
+---
+title: "Roadmap"
+description: "Where floorlaunch is today and what is planned, in order."
+---
+
+## Current status (v1)
+
+The core Anchor program is built and passing an 18-test integration suite on a
+local validator: oracle pushes with EMA index and circuit breaker, bonding
+curve, graduation into the internal AMM, CDP shorts, clamped funding,
+liquidations with insurance top-up, the staleness guard, admin parameter
+updates, fee withdrawal, and an external-venue market running off a treasury
+reserve with an oracle-pushed mark.
+
+The v1 price feed (the [relayer](/oracle/architecture)) is built (TypeScript,
+`relayer/` in the repo): Magic Eden listing-ladder estimation for NFT floors, a live keyless
+TCGplayer source for raw cards plus config-priced graded mode with live Pyth
+SOL/USD conversion, a Meteora DAMM mark source for external venues,
+disagreement gates, and YAML per-market config. On 2026-07-23 the full stack
+ran end to end on a local validator against live Mad Lads data: the relayer
+pushed the real index, then the market ran curve launch, graduation, AMM
+trading, a hedger short, and funding accrual. On 2026-07-24 the card pipeline
+repeated the exercise live (Umbreon VMAX Alt Art, swsh7-215 RAW, $2,137.76 on
+TCGplayer, on chain at 28.32 SOL within 2 bps of source) and the Meteora mark
+source was verified against a live SOL-paired DAMM pool.
+
+An adversarial review pass on the funding, liquidation, and vault-conservation
+math ran on 2026-07-24; the three findings it produced (funding-crank dt cap,
+oracle pushes refused while frozen, vault rent buffer) are fixed and covered
+above.
+
+Not yet done: graded card-price API sources (subscription keys), devnet and
+mainnet deployments, and any independent audit. floorlaunch is not deployed
+anywhere yet.
+
+## Planned work
+
+Roughly in build order. Items are planned, not promised.
+
+### Meteora external venue (shipped in v1 form)
+
+Done on chain: markets carry a [venue](/concepts/amm#venues), and
+[`create_external_market`](/reference/instructions#create_external_market)
+attaches a market to a token launched on Meteora DBC into a DAMM pool, with
+**treasury-reserve supply** (`open_short` draws from a program-held reserve
+whose balance is the physical open-interest cap) and an **oracle-pushed mark**
+([`push_mark`](/reference/instructions#push_mark)) computed by the relayer
+from Meteora's public pool API. The internal curve and AMM remain the default
+venue.
+
+Remaining on this path: a floorlaunch-branded DBC config key so launches run
+through Meteora end to end from our UI (today an external launch happens on
+Meteora's side first, then the market attaches).
+
+### Production graded-card sources
+
+The relayer's raw-card source (TCGplayer via pokemontcg.io) is live. Graded
+production means wiring the full [oracle pipeline](/oracle/card-pipeline):
+subscription aggregator APIs plus eBay sold prints plus tokenized-venue
+cross-checks, MAD outlier rejection, sanity bands from capitalized bids,
+cross-source agreement gates, and paging alerts. The NFT side additionally
+gains a Tensor bid leg (see [NFT pipeline](/oracle/nft-pipeline)) once API
+keys are provisioned.
+
+### On-chain staleness guard (shipped)
+
+Done: a per-market `max_index_age_secs` now rejects `open_short`,
+`withdraw_collateral` against debt, `accrue_funding`, and `liquidate` with
+`IndexStale` when `now - index_last_ts` exceeds it, alongside an admin
+`update_market_params` instruction (curve virtuals immutable). See the
+[staleness guard](/concepts/price-index#staleness-guard).
+
+### Physical delivery valve
+
+An arbitrage-triggered pressure valve for card markets: deliver a vaulted-card
+NFT (Collector Crypt style, redeemable for the physical card) of the matching
+card and grade to the program at index value; the NFT is auctioned and
+proceeds join the collateral pool. One-directional and transient, so it
+anchors premiums with real assets without becoming a custody vault.
+
+### Long-side staked funding
+
+v1 settles funding against short debt only. v2 adds an opt-in staking pool so
+token holders who stake participate in funding flows directly, tightening the
+peg from the long side.
+
+### Permissionless listing
+
+Replace admin gating with on-chain depth attestations, so anyone can list a
+market whose underlying provably meets the [listing criteria](/guides/listing-a-market).
+
+### Timed auction frames
+
+An alternative launch mode in the style of Long's frames: time-gated targets
+where a launch fails cleanly if demand does not materialize on schedule,
+instead of lingering half-bootstrapped.
+
+### Audits
+
+Independent review of the funding math, liquidation edges, and vault
+accounting before any mainnet deployment. A fuzz harness for the CDP and
+funding paths is part of this work.
+
+<Note>
+Order matters more than dates: production oracle sources come before any
+public deployment; audits come before mainnet.
+</Note>

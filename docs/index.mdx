@@ -1,0 +1,85 @@
+---
+title: "Introduction"
+description: "floorlaunch is a launchpad for funding-pegged synthetic tokens that track collectible markets: graded trading cards and NFT collection floors. No custody, no vault."
+---
+
+On every other launchpad, a token is backed by nothing but attention. On floorlaunch, every token is launched **against a real collectible market**. The creator picks the underlying: a specific graded card (a PSA 10 Umbreon VMAX, say) or an NFT collection floor (Mad Lads). Buyers get liquid exposure to that collectible's price, and the token tracks it through a live price feed plus hedger arbitrage. SOL is just the money you pay with; it is never the thing being tracked. One million tokens represent one unit of the collectible: one graded card, or one floor NFT.
+
+<div className="fl-card-grid">
+  <a className="fl-card-wrap" href="https://solscan.io/account/2PbML56TS9o7yCRmYS58mLcLAJNsCTx9DSobFrN6vKUZ?cluster=devnet" target="_blank" rel="noreferrer">
+    <div className="fl-card">
+      <img src="/images/cards/birds.jpg" alt="Moltres and Zapdos and Articuno GX SM210, PSA 10" noZoom />
+    </div>
+    <div className="fl-card-caption">Moltres &amp; Zapdos &amp; Articuno GX<br />PSA 10 · inscribed on chain</div>
+  </a>
+  <a className="fl-card-wrap" href="https://solscan.io/account/4chUVvKJ5FRyX5Rrfw17nmxq3AaEWApipGxDFEEAXzAa?cluster=devnet" target="_blank" rel="noreferrer">
+    <div className="fl-card">
+      <img src="/images/cards/charizard.jpg" alt="Charizard VMAX Shining Fates SV107, PSA 10" noZoom />
+    </div>
+    <div className="fl-card-caption">Charizard VMAX (Shining Fates)<br />PSA 10 · inscribed on chain</div>
+  </a>
+  <a className="fl-card-wrap" href="https://solscan.io/account/FR57R4eokbFSqnfwzdkuKfgL46hRQ7knN17fzyEmNC47?cluster=devnet" target="_blank" rel="noreferrer">
+    <div className="fl-card">
+      <img src="/images/cards/sylveon.jpg" alt="Sylveon V Full Art Evolving Skies 184, PSA 10" noZoom />
+    </div>
+    <div className="fl-card-caption">Sylveon V Full Art (Evolving Skies)<br />PSA 10 · inscribed on chain</div>
+  </a>
+</div>
+
+<p style={{ textAlign: "center", fontSize: "0.8rem", opacity: 0.65, marginTop: "-1.2rem" }}>
+  These three cards are real markets from our allowlist, and their artwork is inscribed byte-for-byte on Solana. Click a card to see it on Solscan.
+</p>
+
+## Launching a market means choosing an underlying
+
+<Steps>
+  <Step title="Pick the collectible">
+    A market is listed for one underlying: one card at one grade, a basket of cards, or one NFT collection's floor.
+  </Step>
+  <Step title="The market gets a price feed">
+    A signed feed reads the collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector Crypt, Magic Eden), filters manipulation, and writes the result on chain.
+  </Step>
+  <Step title="The token launches on a curve">
+    Anyone can buy from the first block; the launch works like any memecoin curve, but the token has a reference price from day one.
+  </Step>
+  <Step title="The token tracks the collectible">
+    Funding and hedger arbitrage pull the token's price toward the collectible's price, up and down. Card doubles, your exposure doubles.
+  </Step>
+</Steps>
+
+The protocol never touches the collectible itself. There is no vault of cards or NFTs, no redemption queue, and no pooled collateral priced by an oracle. The tether comes from two forces instead: collateralized reserve arbitrage against the index (drawing fixed-supply tokens from a program treasury and returning them), and a clamped funding rate that pays whichever side pulls price back toward it. Every synth is a fixed-supply SPL token whose mint authority is revoked at creation.
+
+<Note>
+The v1 program, oracle relayer, and external-venue (Meteora) support are built and tested locally but not yet deployed to a public cluster. Program ID: `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`. The physical delivery valve and graded-card API sources remain planned work; pages that describe them say so explicitly.
+</Note>
+
+## Who it's for
+
+- **Longs.** Anyone who wants price exposure to a PSA 10 card or a blue-chip NFT floor without buying, storing, grading, or insuring the real thing. Buy the synth on the launch curve or the AMM; sell it whenever you like.
+- **Hedgers (the natural shorts).** Holders of the underlying can post SOL collateral, draw synth from the reserve at the index, and sell it, locking in today's price without selling their card or NFT. They are structurally motivated to supply the short side, which is what most floor-derivative designs lack.
+- **Liquidators and crankers.** Funding accrual and liquidations are permissionless. Keepers earn a liquidation bonus for closing undercollateralized shorts.
+
+## Why this design
+
+Every earlier attempt at collectible price exposure died in one of two ways: vault models (fractionalization) filled with the worst items and amplified crashes, and oracle-settled perps got drained the first time someone manipulated a thin floor print. floorlaunch is shaped around those failure modes:
+
+- **No vault.** Nothing to fill with lemons, no custody honeypot, no reflexive redemption spiral.
+- **Bounded oracle damage.** A bad index print cannot unlock anyone's funds. It can only tilt the funding rate, which is clamped per day, and a print that deviates too far from the TWAP trips a circuit breaker that freezes the market.
+- **A bounded hedge facility.** Each market premints a fixed hedge reserve that hedgers draw against collateral, sized against the real depth of the collectible's market. When the reserve is empty the facility is simply full, so the synthetic can never grow large enough to become the price setter for its own underlying.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="How it works" icon="route" href="/how-it-works">
+    The full market lifecycle, from listing through launch, graduation, and live trading.
+  </Card>
+  <Card title="Asset classes" icon="layers" href="/asset-classes">
+    Why graded cards are the flagship underlying and how NFT floors differ.
+  </Card>
+  <Card title="Funding" icon="scale" href="/concepts/funding">
+    The mechanism that tethers the synth to the index without redemption.
+  </Card>
+  <Card title="Instruction reference" icon="code" href="/reference/instructions">
+    Every program instruction, its arguments, and its accounts.
+  </Card>
+</CardGroup>

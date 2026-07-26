@@ -1,0 +1,127 @@
+---
+title: "FAQ"
+description: "Common questions about floorlaunch markets, the peg, the oracle, and risk."
+---
+
+<AccordionGroup>
+
+<Accordion title="What is my token actually tied to?">
+A real collectible's price. Every market is launched against one underlying:
+a specific graded card (for example, a PSA 10 Umbreon VMAX) or an NFT
+collection's floor (for example, Mad Lads). One million tokens represent one
+unit of that collectible, and the token's price is pulled toward the
+collectible's live market price by [funding](/concepts/funding) and hedger
+arbitrage. SOL is just what you pay with; it is never the thing being
+tracked. If the card doubles, your exposure doubles; if it drops, so does
+your token.
+</Accordion>
+
+<Accordion title="Is the token backed by real cards or NFTs?">
+No. floorlaunch holds no cards, no NFTs, and runs no vault. The token is a
+synthetic: CDP supply drawn from the reserve is backed by shorts' SOL
+collateral, and the price is tethered to the oracle index by arbitrage and
+[funding](/concepts/funding). This is deliberate: no custody means no lemons
+problem, no custody honeypot, and no oracle-priced redemption to drain.
+</Accordion>
+
+<Accordion title="Is the supply fixed? Can the team mint more?">
+No one can mint more, ever. Every floorlaunch token is a fixed-supply SPL
+token: on the internal venue the entire allocation (curve supply plus the
+hedging reserve) is preminted at market creation and the mint authority is
+revoked in the same transaction, which is what wallets and screeners show as
+"mint revoked". Externally launched tokens arrive with fixed supply already.
+The hedging facility is a preminted reserve allocation, not an inflation
+mechanism, and the unsold curve allocation burns at
+[graduation](/concepts/graduation), so supply can only ever shrink.
+</Accordion>
+
+<Accordion title="Why doesn't the token price exactly equal the index?">
+The peg is soft. Funding and reserve draw-and-repay arbitrage pull the price
+toward the index; they do not pin it there. A basis of a few percent is normal and can
+persist. If you need exact index exposure at every block, a funding-pegged
+synthetic is the wrong instrument.
+</Accordion>
+
+<Accordion title="What happens if the oracle is manipulated?">
+The damage is bounded by design. A bad print can only tilt the funding rate
+(clamped by `max_funding_bps_per_day`) and shift CDP draw/repay pricing until
+the TWAP recovers, and a print that deviates too far from the TWAP trips the
+[circuit breaker](/concepts/circuit-breaker) and freezes the market instead of
+entering the index. There is no redemption-against-pooled-money mechanism for
+a manipulated price to drain.
+</Accordion>
+
+<Accordion title="What happens if the price feed (the relayer) goes down?">
+The index stops updating and `index_last_ts` on the market account shows its
+age. Past `max_index_age_secs`, the on-chain [staleness
+guard](/concepts/price-index#staleness-guard) stops trusting the last value:
+new shorts, withdrawals against debt, funding, and liquidations are rejected
+with `IndexStale` until a fresh push lands. Trading, repaying debt, and adding
+collateral keep working, so the market degrades to a safe mode rather than
+trapping anyone.
+</Accordion>
+
+<Accordion title="Who is the counterparty to my long?">
+Shorts. Every CDP-drawn token is a short's debt, collateralized in SOL at a
+minimum ratio. The [insurance fund](/concepts/insurance-fund), seeded at
+graduation, backstops liquidation shortfalls. Curve-phase tokens are backed by
+the SOL raised into the pool, like any launchpad token.
+</Accordion>
+
+<Accordion title="Can I redeem the token for a card or an NFT?">
+Not in v1. A one-directional physical delivery valve (deliver a vaulted-card
+NFT at index value when the token trades rich) is planned; see the
+[roadmap](/roadmap). Redemption the other way, token to physical, is not
+planned; that would make the protocol a vault, which the design rejects.
+</Accordion>
+
+<Accordion title="Why is collateral SOL only?">
+Simplicity and safety in v1: one collateral asset, no collateral price feed
+needed beyond the index itself (which is quoted in lamports), and no
+multi-asset liquidation math. Note the consequence: positions carry
+underlying-versus-SOL relative exposure.
+</Accordion>
+
+<Accordion title="What does it mean when a market is frozen?">
+Trading, shorts, funding, and liquidations are paused; adding collateral still
+works. Markets freeze when the circuit breaker trips on an outlier oracle
+print or when the admin freezes manually. The admin reviews and unfreezes.
+Balances and positions are untouched while frozen.
+</Accordion>
+
+<Accordion title="Is there a floorlaunch token?">
+No. There is no protocol token, no points program, and nothing of the sort
+planned in this documentation. Each market's synth token is the only token the
+program creates.
+</Accordion>
+
+<Accordion title="How are fees taken and who gets them?">
+Each trade pays a per-market fee (`curve_fee_bps` on the curve,
+`amm_fee_bps` on the AMM) that accrues inside the market vault and is
+withdrawable by the admin via `withdraw_fees`. At graduation,
+`insurance_share_bps` of the curve raise seeds the market's insurance fund.
+There are no fees on opening or closing shorts beyond normal trading.
+</Accordion>
+
+<Accordion title="What chains does floorlaunch run on?">
+Solana only. The program is written in Anchor, and the design leans on
+Solana-native infrastructure (SPL tokens, Pyth for the SOL/USD leg,
+Solana-native marketplaces and launch infrastructure).
+</Accordion>
+
+<Accordion title="Is floorlaunch audited? Is it live?">
+No and no. The program passes its integration test suite locally, but it is
+pre-audit and not deployed to devnet or mainnet. Nothing in these docs is an
+invitation to deposit funds anywhere. Audits precede mainnet; see the
+[roadmap](/roadmap).
+</Accordion>
+
+<Accordion title="How is this different from fractionalized NFTs or a 404 token?">
+Fractionalization and 404-style hybrids custody the underlying and peg by
+two-way redemption, which makes them trackers with vault problems (adverse
+selection, custody risk, reflexive unwinding). floorlaunch references the
+underlying's price without holding it, and accepts a softer peg in exchange
+for eliminating custody entirely. See [How it works](/how-it-works).
+</Accordion>
+
+</AccordionGroup>

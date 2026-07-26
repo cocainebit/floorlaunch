@@ -1,0 +1,89 @@
+---
+title: "Program ID & PDAs"
+description: "The floorlaunch program address and every program-derived address it owns"
+---
+
+## Program ID
+
+| Cluster | Address |
+| --- | --- |
+| Localnet / devnet | `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM` |
+| Mainnet | Not deployed |
+
+## PDA map
+
+A PDA (program-derived address) is a Solana account whose address is computed from the program and fixed seeds instead of from a private key. No key for it exists anywhere, so only the program itself can sign for the account: no team member, admin, or server holds a key to any vault, treasury, or market account listed below.
+
+Every account the program owns is a PDA. There is exactly one `Global` per deployment, and one of each market-scoped account per listed collection.
+
+| Account | Seeds | Owner program | Notes |
+| --- | --- | --- | --- |
+| `Global` | `["global"]` | floorlaunch | Singleton config: admin, oracle authority, default params |
+| `Market` | `["market", collection]` | floorlaunch | One per underlying; `collection` is the 32-byte underlying identifier |
+| Synth mint | `["mint", market]` | SPL Token | Internal venue only; 6 decimals; the full supply is preminted at `create_market` and the **mint authority is revoked** in the same transaction. External markets use the externally launched (also fixed-supply) mint recorded in `Market.synth_mint` |
+| Pool token account | `["pool", market]` | SPL Token | Internal venue only; holds the preminted curve allocation during Bootstrap, then the AMM-side seed after [graduation](/concepts/graduation) (the unsold excess burns); authority is the `Market` PDA |
+| Treasury token account | `["treasury", market]` | SPL Token | Authority is the `Market` PDA. Holds the CDP hedging reserve on both venues ([`open_short`](/reference/instructions#open_short) draws from it, repay/liquidate return to it, and its balance is the physical open-interest ceiling). Preminted to `max_open_interest` on internal markets; funded by SPL transfer at listing on external markets |
+| SOL vault | `["vault", market]` | System | Plain system account; see below |
+| `ShortPosition` | `["short", market, owner]` | floorlaunch | One per (market, wallet) pair |
+
+<Note>
+The `collection` seed is an opaque 32-byte identifier chosen at listing time. For an NFT market it is the verified collection mint; for a card market it is a key the relayer config maps to a card+grade or basket spec. The program never interprets it. See [Asset classes](/asset-classes).
+</Note>
+
+## The SOL vault
+
+Each market has a single SOL vault, an account only the program itself can sign for, holding **all** lamports belonging to that market. The split is tracked by fields on the `Market` account, not by separate vaults:
+
+| Lamports in the vault | Tracked by |
+| --- | --- |
+| Curve raise (pre-graduation) | `Market.curve_sol_raised` |
+| AMM SOL reserve (post-graduation) | `Market.amm_sol_reserve` |
+| Short collateral | `Market.total_collateral` |
+| Insurance fund | `Market.insurance_lamports` |
+| Accrued protocol fees | `Market.fee_lamports` |
+| Rent buffer (untracked) | Seeded by the admin at market creation; never counted or withdrawn |
+
+Outbound transfers are signed by the vault PDA with seeds `["vault", market, vault_bump]` via the System Program. The untracked rent-exemption buffer guarantees outflows can never strand the vault in the below-rent-exempt band where system transfers start failing.
+
+## Deriving addresses in TypeScript
+
+The same derivations used by the test suite:
+
+```typescript
+import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+
+const [globalPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("global")],
+  program.programId
+);
+const [marketPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("market"), collection.toBuffer()],
+  program.programId
+);
+const [mintPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("mint"), marketPda.toBuffer()],
+  program.programId
+);
+const [poolPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("pool"), marketPda.toBuffer()],
+  program.programId
+);
+const [treasuryPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("treasury"), marketPda.toBuffer()],
+  program.programId
+);
+const [vaultPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("vault"), marketPda.toBuffer()],
+  program.programId
+);
+const [shortPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from("short"), marketPda.toBuffer(), owner.toBuffer()],
+  program.programId
+);
+
+// User synth balances live in standard associated token accounts
+const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+```
+
+Stored bumps: `Global.bump`, `Market.bump`, `Market.vault_bump`, `Market.mint_bump`, `Market.treasury_bump`, and `ShortPosition.bump` are persisted at initialization and used for all PDA signing, so clients never need to pass bumps explicitly.
