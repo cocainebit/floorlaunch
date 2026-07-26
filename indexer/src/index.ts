@@ -13,6 +13,13 @@ import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
 import { devLaunch, loadListings } from "./launch.js";
+import {
+  getOrCreateEscrow,
+  startVerification,
+  checkVerification,
+  listEscrows,
+  type Platform,
+} from "./escrow.js";
 
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
 const WS_RPC = process.env.RPC_WS_URL ?? RPC.replace("http", "ws").replace("8899", "8900");
@@ -170,6 +177,42 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/listings", (_req, res) => res.json(loadListings()));
+
+app.get("/escrows", (_req, res) => res.json(listEscrows()));
+
+app.post("/escrow", (req, res) => {
+  try {
+    const { platform, handle } = req.body as { platform: Platform; handle: string };
+    if (!["x", "youtube", "elitefourum"].includes(platform) || !handle) {
+      throw new Error("platform must be x|youtube|elitefourum and handle required");
+    }
+    res.json(getOrCreateEscrow(platform, handle));
+  } catch (e: any) {
+    res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
+
+app.post("/escrow/:platform/:handle/verify-start", (req, res) => {
+  try {
+    res.json(
+      startVerification(req.params.platform as Platform, req.params.handle, req.body.wallet)
+    );
+  } catch (e: any) {
+    res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
+
+app.post("/escrow/:platform/:handle/verify-check", async (req, res) => {
+  try {
+    res.json(
+      await checkVerification(RPC, req.params.platform as Platform, req.params.handle, {
+        adminOverride: req.body?.adminOverride === true && (RPC.includes("127.0.0.1") || RPC.includes("localhost")),
+      })
+    );
+  } catch (e: any) {
+    res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
 
 app.post("/dev/launch", async (req, res) => {
   try {

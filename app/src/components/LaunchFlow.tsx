@@ -55,7 +55,7 @@ export default function LaunchFlow({
   const [ticker, setTicker] = useState("");
   const [name, setName] = useState("");
   const [links, setLinks] = useState({ twitter: "", website: "", discord: "", telegram: "" });
-  const [feeMode, setFeeMode] = useState<"wallet" | "address" | "x">("wallet");
+  const [feeMode, setFeeMode] = useState<"wallet" | "address" | "x" | "youtube" | "elitefourum">("wallet");
   const [feeValue, setFeeValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +97,24 @@ export default function LaunchFlow({
             name,
             image: sel.image,
             links: { ...links, collectiblePage: collectiblePage(sel) },
-            feeReceiver: {
-              kind: feeMode,
-              value: feeMode === "wallet" ? wallet.publicKey.toBase58() : feeValue,
-            },
+            feeReceiver: await (async () => {
+              if (feeMode === "wallet") {
+                return { kind: "wallet", value: wallet.publicKey!.toBase58() };
+              }
+              if (feeMode === "address") {
+                return { kind: "address", value: feeValue };
+              }
+              // Identity receiver: fees accrue to a floorlaunch escrow
+              // until the handle verifies ownership and claims.
+              const er = await fetch(`${INDEXER_HTTP}/escrow`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ platform: feeMode, handle: feeValue }),
+              });
+              const eb = await er.json();
+              if (!er.ok) throw new Error(eb.error ?? "escrow creation failed");
+              return { kind: feeMode, value: feeValue, escrow: eb.escrowPubkey };
+            })(),
             launchedBy: wallet.publicKey.toBase58(),
           },
         }),
@@ -169,7 +183,9 @@ export default function LaunchFlow({
                 [
                   ["wallet", "My wallet"],
                   ["address", "Address"],
-                  ["x", "X account"],
+                  ["x", "X"],
+                  ["youtube", "YouTube"],
+                  ["elitefourum", "Elite Fourum"],
                 ] as const
               ).map(([k, label]) => (
                 <button
@@ -184,14 +200,26 @@ export default function LaunchFlow({
             {feeMode !== "wallet" && (
               <input
                 className="amount-input"
-                placeholder={feeMode === "x" ? "@handle (claimable after identity verification)" : "Solana address"}
+                placeholder={
+                  feeMode === "address"
+                    ? "Solana address"
+                    : feeMode === "youtube"
+                      ? "channel handle (without @)"
+                      : feeMode === "elitefourum"
+                        ? "forum username"
+                        : "@handle"
+                }
                 value={feeValue}
                 onChange={(e) => setFeeValue(e.target.value)}
               />
             )}
-            {feeMode === "x" && (
+            {["x", "youtube", "elitefourum"].includes(feeMode) && (
               <div className="dim form-note">
-                Fees accrue to the handle and become claimable once the account verifies ownership.
+                Their share of trading fees accrues to a floorlaunch escrow. The owner claims by
+                putting a verification code in their public bio
+                {feeMode === "youtube" ? " (channel description)" : feeMode === "elitefourum" ? " (profile About Me)" : ""}
+                , proving ownership, and linking a wallet. You can launch for any creator; they
+                collect whenever they show up.
               </div>
             )}
 
