@@ -4,6 +4,7 @@ import {
   ColorType,
   CandlestickSeries,
   LineSeries,
+  AreaSeries,
   HistogramSeries,
   type IChartApi,
   type ISeriesApi,
@@ -25,20 +26,28 @@ const PER_UNIT = 1_000_000;
 
 interface Props {
   market: string;
+  solUsd: number;
   lastTrade: Trade | null;
   lastIndexTick: IndexTick | null;
 }
 
-export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
+export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const indexRef = useRef<ISeriesApi<"Line"> | null>(null);
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const areaRef = useRef<ISeriesApi<"Area"> | null>(null);
   const lastCandle = useRef<Candle | null>(null);
   const [tf, setTf] = useState(15);
+  const [mode, setMode] = useState<"line" | "candles">("line");
   const tfRef = useRef(tf);
   tfRef.current = tf;
+  // Line mode plots USD; candle mode plots SOL per unit.
+  const usdRef = useRef(1);
+  usdRef.current = mode === "line" && solUsd > 0 ? solUsd : 1;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     if (!holder.current) return;
@@ -83,6 +92,16 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
       priceLineVisible: false,
       crosshairMarkerVisible: false,
     });
+    const area = chart.addSeries(AreaSeries, {
+      lineColor: "#58c76f",
+      lineWidth: 2,
+      topColor: "rgba(88, 199, 111, 0.28)",
+      bottomColor: "rgba(88, 199, 111, 0.0)",
+      priceLineStyle: 1,
+      priceLineColor: "#58c76f",
+      lastValueVisible: true,
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+    });
     const vol = chart.addSeries(HistogramSeries, {
       priceScaleId: "vol",
       priceFormat: { type: "volume" },
@@ -97,8 +116,16 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
     candleRef.current = candles;
     indexRef.current = index;
     volRef.current = vol;
+    areaRef.current = area;
     return () => chart.remove();
   }, []);
+
+  // Mode switch: show one price representation at a time.
+  useEffect(() => {
+    candleRef.current?.applyOptions({ visible: mode === "candles" });
+    volRef.current?.applyOptions({ visible: mode === "candles" });
+    areaRef.current?.applyOptions({ visible: mode === "line" });
+  }, [mode]);
 
   // Load history whenever market or timeframe changes.
   useEffect(() => {
@@ -109,6 +136,7 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
         fetchIndex(market),
       ]);
       if (dead || !candleRef.current) return;
+      const mult = usdRef.current;
       candleRef.current.setData(
         cs.map((c) => ({
           time: c.time as UTCTimestamp,
@@ -117,6 +145,9 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
           low: c.low * PER_UNIT,
           close: c.close * PER_UNIT,
         }))
+      );
+      areaRef.current!.setData(
+        cs.map((c) => ({ time: c.time as UTCTimestamp, value: c.close * PER_UNIT * mult }))
       );
       volRef.current!.setData(
         cs.map((c) => ({
@@ -128,7 +159,7 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
       const seen = new Set<number>();
       const line = ix
         .filter((t) => (seen.has(t.ts) ? false : (seen.add(t.ts), true)))
-        .map((t) => ({ time: t.ts as UTCTimestamp, value: t.value * PER_UNIT }));
+        .map((t) => ({ time: t.ts as UTCTimestamp, value: t.value * PER_UNIT * mult }));
       indexRef.current!.setData(line);
       lastCandle.current = cs[cs.length - 1] ?? null;
       chartRef.current!.timeScale().scrollToRealTime();
@@ -136,7 +167,7 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
     return () => {
       dead = true;
     };
-  }, [market, tf]);
+  }, [market, tf, mode]);
 
   // Live candle updates from the WS trade stream.
   useEffect(() => {
@@ -178,6 +209,10 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
       value: c.volume,
       color: c.close >= c.open ? "#1f3d31" : "#3d2523",
     });
+    areaRef.current?.update({
+      time: c.time as UTCTimestamp,
+      value: c.close * PER_UNIT * usdRef.current,
+    });
   }, [lastTrade]);
 
   // Live index line updates.
@@ -185,7 +220,7 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
     if (!lastIndexTick || !indexRef.current) return;
     indexRef.current.update({
       time: lastIndexTick.ts as UTCTimestamp,
-      value: lastIndexTick.value * PER_UNIT,
+      value: lastIndexTick.value * PER_UNIT * usdRef.current,
     });
   }, [lastIndexTick]);
 
@@ -193,6 +228,21 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
     <div className="chart-card card">
       <div className="chart-toolbar">
         <div className="tf-group">
+          <button
+            className={`tf-btn ${mode === "line" ? "active" : ""}`}
+            onClick={() => setMode("line")}
+            title="Line chart (USD)"
+          >
+            ⌁
+          </button>
+          <button
+            className={`tf-btn ${mode === "candles" ? "active" : ""}`}
+            onClick={() => setMode("candles")}
+            title="Candles (SOL per unit)"
+          >
+            ▮
+          </button>
+          <span className="tf-divider" />
           {TFS.map((t) => (
             <button
               key={t.secs}
@@ -210,7 +260,9 @@ export default function Chart({ market, lastTrade, lastIndexTick }: Props) {
           <span className="legend-item">
             <span className="legend-line" /> Floor index
           </span>
-          <span className="legend-unit">SOL per unit · 1M tokens = 1 floor · charting by TradingView</span>
+          <span className="legend-unit">
+            {mode === "line" ? "USD per unit" : "SOL per unit"} · 1M tokens = 1 floor · charting by TradingView
+          </span>
         </div>
       </div>
       <div className="chart-holder" ref={holder} />

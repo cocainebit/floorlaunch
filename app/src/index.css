@@ -485,3 +485,4 @@ th.num, td.num { text-align: right; }
 .pay-mode.active { color: var(--ink); border-color: var(--index); background: rgba(63, 127, 196, 0.08); }
 .collectible-pay { display: flex; flex-direction: column; gap: 8px; }
 .collectible-pay .cta { margin-top: 6px; }
+.tf-divider { width: 1px; background: var(--border); margin: 2px 2px; }

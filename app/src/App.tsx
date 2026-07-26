@@ -138,6 +138,7 @@ export default function App() {
             <UnderlyingStrip m={market} listing={listings[market.market]} />
             <Chart
               market={market.market}
+              solUsd={market.solUsd}
               lastTrade={lastTrade}
               lastIndexTick={lastIndexTick}
             />
