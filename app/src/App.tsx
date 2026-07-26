@@ -143,6 +143,7 @@ export default function App() {
       ) : view === "launch" ? (
         <LaunchFlow
           live={new Set(markets.map((m) => m.market))}
+          listings={listings}
           onLaunched={(mkt) => {
             fetchListings().then(setListings).catch(() => {});
             setSelected(mkt);

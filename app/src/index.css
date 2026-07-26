@@ -302,3 +302,43 @@ th.num, td.num { text-align: right; }
 .collectible-stats { padding: 10px 0; text-align: left; }
 .social-links { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
 .social-links a { text-decoration: none; }
+
+/* ---------- launch wizard ---------- */
+.wizard-steps { display: flex; gap: 8px; margin-bottom: 22px; }
+.wizard-step {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--ink-3);
+  font-size: 13px; font-weight: 600; cursor: default; padding: 6px 10px;
+  border-radius: 8px; font-family: var(--sans);
+}
+.wizard-step.active { color: var(--ink); background: var(--surface-2); }
+.wizard-step.done { color: var(--up); cursor: pointer; }
+.wizard-num {
+  width: 20px; height: 20px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 11px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.wizard-step.active .wizard-num { background: var(--index); color: #fff; border-color: var(--index); }
+.wizard-step.done .wizard-num { background: rgba(46,163,111,0.15); color: var(--up); border-color: rgba(46,163,111,0.4); }
+.wizard-hero { margin-bottom: 18px; }
+.wizard-hero .launch-title { font-size: 26px; letter-spacing: -0.02em; }
+.wizard-sub { max-width: 560px; margin-top: 6px; line-height: 1.5; }
+.wizard-controls { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.wizard-body { display: grid; grid-template-columns: 260px minmax(0, 560px); gap: 16px; }
+.wizard-anchor { padding: 16px; text-align: center; height: fit-content; }
+.ticker-row { display: flex; align-items: center; gap: 0; }
+.ticker-prefix {
+  background: var(--surface-2); border: 1px solid var(--border); border-right: none;
+  border-radius: 8px 0 0 8px; padding: 10px 10px 10px 12px; font-size: 15px; color: var(--ink-3);
+}
+.ticker-input { border-radius: 0 8px 8px 0 !important; }
+.ticker-check { font-size: 11.5px; margin-top: 6px; }
+.ticker-check.ok { color: var(--up); }
+.ticker-check.bad { color: var(--warn); }
+.extras-toggle {
+  display: block; background: none; border: none; color: var(--ink-2);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; margin: 16px 0 8px; padding: 0;
+}
+.extras-toggle:hover { color: var(--ink); }
+.extras-body { padding-top: 4px; }
+.wizard-next { margin-top: 16px; }
