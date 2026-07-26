@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MarketInfo } from "../api";
 import { useFlWallet } from "../wallet";
 import { openShort } from "../tx";
@@ -10,6 +10,7 @@ export default function HedgePanel({ m }: { m: MarketInfo }) {
   const [collateral, setCollateral] = useState("10");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEffect(() => setStatus(null), [m.market, m.status]);
   const col = parseFloat(collateral) || 0;
   const indexUnit = m.indexPerToken * PER_UNIT;
 

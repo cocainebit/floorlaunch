@@ -475,3 +475,13 @@ th.num, td.num { text-align: right; }
 .lz-upload-done { display: flex; align-items: center; gap: 10px; color: #cdd9cd; }
 .lz-upload-done img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; }
 .lz-links2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.curve-note { font-size: 11px; margin-top: 8px; }
+.pay-modes { display: flex; gap: 6px; margin-bottom: 10px; }
+.pay-mode {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border-soft);
+  color: var(--ink-2); border-radius: 7px; padding: 6px 0; font-size: 11.5px;
+  font-weight: 600; cursor: pointer;
+}
+.pay-mode.active { color: var(--ink); border-color: var(--index); background: rgba(63, 127, 196, 0.08); }
+.collectible-pay { display: flex; flex-direction: column; gap: 8px; }
+.collectible-pay .cta { margin-top: 6px; }

@@ -116,6 +116,7 @@ function handleEvent(rawName: string, data: any, sig: string, ts: number) {
     };
     store(market).trades.push(t);
     broadcast({ type: "trade", market, trade: t });
+    if (t.phase === "curve") setTimeout(autoGraduate, 1_500);
   } else if (name === "indexPushed") {
     const market = data.market.toBase58();
     const tick = { ts, value: n(data.twap) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT };
@@ -372,6 +373,49 @@ async function refreshOracles() {
 }
 setInterval(refreshOracles, 300_000);
 setTimeout(refreshOracles, 15_000);
+
+// Auto-migration: when a curve reaches its graduation target the market
+// migrates to the AMM automatically (graduate is permissionless; the
+// indexer pays the fee). Swept every 10s and nudged by trade events.
+let graduating = new Set<string>();
+async function autoGraduate() {
+  try {
+    const { Keypair } = await import("@solana/web3.js");
+    const anchorMod = await import("@coral-xyz/anchor");
+    const { readFileSync } = await import("node:fs");
+    const { homedir } = await import("node:os");
+    const admin = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(readFileSync(`${homedir()}/.config/solana/id.json`, "utf8")))
+    );
+    const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(admin), {
+      commitment: "confirmed",
+    });
+    const prog = new anchorMod.Program(structuredClone(idl), provider);
+    const accounts = await (prog.account as any).market.all();
+    for (const a of accounts) {
+      const m = a.account;
+      const key = a.publicKey.toBase58();
+      if (!("bootstrap" in m.status) || graduating.has(key)) continue;
+      if (Number(m.curveSolRaised) < Number(m.params.graduationTargetSol)) continue;
+      graduating.add(key);
+      try {
+        const pid = new PublicKey(PROGRAM_ID);
+        const [mint] = PublicKey.findProgramAddressSync([Buffer.from("mint"), a.publicKey.toBuffer()], pid);
+        const [pool] = PublicKey.findProgramAddressSync([Buffer.from("pool"), a.publicKey.toBuffer()], pid);
+        const sig = await prog.methods
+          .graduate()
+          .accountsPartial({ market: a.publicKey, synthMint: mint, poolToken: pool })
+          .rpc();
+        console.log(`auto-migrated ${key.slice(0, 8)} to AMM: ${sig.slice(0, 16)}`);
+      } catch (e: any) {
+        console.log("auto-migrate failed:", String(e.message).slice(0, 80));
+      } finally {
+        graduating.delete(key);
+      }
+    }
+  } catch {}
+}
+setInterval(autoGraduate, 10_000);
 
 restore();
 subscribe();

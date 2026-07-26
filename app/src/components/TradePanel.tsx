@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { RPC_URL } from "../wallet";
 import type { MarketInfo } from "../api";
 import { useFlWallet } from "../wallet";
-import { ammBuy, ammSell, curveBuy, curveSell, graduate } from "../tx";
+import { ammBuy, ammSell, curveBuy, curveSell } from "../tx";
 
 const FEE_BPS = 70;
 const SLIPPAGE = 0.02; // 2% guard on the quoted output
@@ -38,9 +40,33 @@ type Status =
 export default function TradePanel({ m }: { m: MarketInfo }) {
   const wallet = useFlWallet();
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [payMode, setPayMode] = useState<"sol" | "collectible">("sol");
+  const [nfts, setNfts] = useState<string[]>([]);
   const [amount, setAmount] = useState("1.0");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const amt = parseFloat(amount) || 0;
+
+  useEffect(() => setStatus({ kind: "idle" }), [m.market, m.status]);
+
+  // Wallet's on-chain collectibles (decimals-0, amount-1 tokens): holders
+  // of the real item can enter the market by routing it in at the floor.
+  useEffect(() => {
+    if (!wallet.publicKey || payMode !== "collectible") return;
+    const conn = new Connection(RPC_URL, "confirmed");
+    conn
+      .getParsedTokenAccountsByOwner(wallet.publicKey, {
+        programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+      })
+      .then((r) => {
+        setNfts(
+          r.value
+            .map((a: any) => a.account.data.parsed.info)
+            .filter((i: any) => i.tokenAmount.decimals === 0 && i.tokenAmount.uiAmount === 1)
+            .map((i: any) => i.mint)
+        );
+      })
+      .catch(() => setNfts([]));
+  }, [wallet.publicKey?.toBase58(), payMode, m.market]);
 
   const q = amt > 0 ? (side === "buy" ? quoteBuy(m, amt) : quoteSell(m, amt)) : null;
 
@@ -66,17 +92,6 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
     ? Math.min(100, (m.curveSolRaised / m.graduationTargetSol) * 100)
     : null;
 
-  async function doGraduate() {
-    if (!wallet.provider) return;
-    setStatus({ kind: "sending" });
-    try {
-      const r = await graduate(wallet.provider, m.market);
-      setStatus({ kind: "ok", sig: r.sig });
-    } catch (e: any) {
-      setStatus({ kind: "error", msg: String(e.message ?? e).slice(0, 90) });
-    }
-  }
-
   return (
     <div className="card trade-card">
       {curveProgress !== null && (
@@ -90,11 +105,11 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
           <div className="curve-bar">
             <div className="curve-fill" style={{ width: `${curveProgress}%` }} />
           </div>
-          {curveProgress >= 100 && wallet.connected && (
-            <button className="cta neutral graduate-btn" onClick={doGraduate}>
-              Graduate to AMM
-            </button>
-          )}
+          <div className="curve-note dim">
+            {curveProgress >= 100
+              ? "Migrating to the AMM…"
+              : "Migrates to the AMM automatically at the target."}
+          </div>
         </div>
       )}
       <div className="side-tabs">
@@ -112,6 +127,59 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
         </button>
       </div>
 
+      {side === "buy" && (
+        <div className="pay-modes">
+          <button className={`pay-mode ${payMode === "sol" ? "active" : ""}`} onClick={() => setPayMode("sol")}>
+            Pay with SOL
+          </button>
+          <button
+            className={`pay-mode ${payMode === "collectible" ? "active" : ""}`}
+            onClick={() => setPayMode("collectible")}
+          >
+            Pay with the collectible
+          </button>
+        </div>
+      )}
+      {side === "buy" && payMode === "collectible" ? (
+        <div className="collectible-pay">
+          {wallet.connected ? (
+            nfts.length > 0 ? (
+              <>
+                <div className="row">
+                  <span>On-chain items in wallet</span>
+                  <span className="mono">{nfts.length}</span>
+                </div>
+                <div className="row">
+                  <span>1 item at the live index</span>
+                  <span className="mono">{(m.indexPerToken * 1e6).toFixed(3)} SOL</span>
+                </div>
+                <div className="row">
+                  <span>≈ tokens received</span>
+                  <span className="mono">
+                    {quoteBuy(m, m.indexPerToken * 1e6).out.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <button className="cta buy" disabled title="Marketplace routing ships with the devnet deployment">
+                  Route item → tokens (soon)
+                </button>
+                <div className="dim form-note">
+                  Sells your item into the real floor (Magic Eden / Collector Crypt) at the live
+                  price and buys the token with the proceeds, one flow. Requires public-cluster
+                  marketplaces; on localnet this is preview only.
+                </div>
+              </>
+            ) : (
+              <div className="dim form-note">
+                No on-chain collectibles detected in this wallet. Holders of the real item (a
+                collection NFT or vaulted card) can swap it straight into the token here.
+              </div>
+            )
+          ) : (
+            <button className="cta buy" onClick={wallet.connect}>Connect wallet</button>
+          )}
+        </div>
+      ) : (
+      <>
       <label className="field-label">
         {side === "buy" ? "You pay (SOL)" : "You sell (tokens)"}
       </label>
@@ -183,6 +251,8 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
       )}
       {status.kind === "error" && (
         <div className="tx-note err">{status.msg}</div>
+      )}
+      </>
       )}
 
       <div className="claim-strip">
