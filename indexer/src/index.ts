@@ -346,6 +346,16 @@ async function refreshOracles() {
       commitment: "confirmed",
     });
     const prog = new anchorMod.Program(structuredClone(idl), provider);
+    // Localnet self-funding: the oracle pays its own push fees.
+    if (RPC.includes("127.0.0.1") || RPC.includes("localhost")) {
+      const bal = await connection.getBalance(oracle.publicKey);
+      if (bal < 1e8) {
+        try {
+          const sig = await connection.requestAirdrop(oracle.publicKey, 10e9);
+          await connection.confirmTransaction(sig);
+        } catch {}
+      }
+    }
     const [globalPda] = PublicKey.findProgramAddressSync([Buffer.from("global")], new PublicKey(PROGRAM_ID));
     const listings = loadListings();
     const solUsd = await getSolUsd();
