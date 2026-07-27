@@ -11,7 +11,7 @@ const PER_UNIT = 1_000_000;
 const hhmmss = (ts: number) =>
   new Date(ts * 1000).toLocaleTimeString("en-GB", { hour12: false });
 
-function TradesTable({ trades }: { trades: Trade[] }) {
+function TradesTable({ trades, solUsd }: { trades: Trade[]; solUsd: number }) {
   return (
     <div className="table-wrap">
       <table>
@@ -19,7 +19,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
           <tr>
             <th>Time</th>
             <th>Side</th>
-            <th className="num">Price (SOL/unit)</th>
+            <th className="num">Price ($/unit)</th>
             <th className="num">Tokens</th>
             <th className="num">SOL</th>
             <th>Trader</th>
@@ -32,7 +32,11 @@ function TradesTable({ trades }: { trades: Trade[] }) {
               <td className={t.side === "buy" ? "up" : "down"}>
                 {t.side === "buy" ? "Buy" : "Sell"}
               </td>
-              <td className="num mono">{(t.priceSol * PER_UNIT).toFixed(3)}</td>
+              <td className="num mono">
+                {solUsd > 0
+                  ? `$${(t.priceSol * PER_UNIT * solUsd).toFixed(2)}`
+                  : (t.priceSol * PER_UNIT).toFixed(3)}
+              </td>
               <td className="num mono">
                 {t.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </td>
@@ -230,7 +234,7 @@ export default function Panels({
           </button>
         ))}
       </div>
-      {tab === "trades" && <TradesTable trades={trades} />}
+      {tab === "trades" && <TradesTable trades={trades} solUsd={m.solUsd} />}
       {tab === "stats" && <Stats m={m} funding={funding} />}
       {tab === "holders" && <HoldersTab m={m} />}
       {tab === "position" && <PositionTab m={m} />}

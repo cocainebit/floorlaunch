@@ -113,9 +113,12 @@ export async function devLaunch(
   );
 
   {
-    // Curve opens at the live index; deep virtuals keep launch premium sane.
-    const vSol = 100n * BigInt(LAMPORTS);
-    const vTok = (vSol * BASE_UNITS_PER_NFT) / BigInt(indexLamports);
+    // Mirror the Meteora DBC valuation span (open at 25% of the migration
+    // valuation): the curve opens at index/4 and, after the 10 SOL raise,
+    // closes at the collectible's live index, so the AMM seeds on-peg.
+    // Math: price x4 over the raise needs ((vSol+R)/vSol)^2 = 4 -> vSol = R.
+    const vSol = 10n * BigInt(LAMPORTS);
+    const vTok = (vSol * 4n * BASE_UNITS_PER_NFT) / BigInt(indexLamports);
     const params = {
       indexWindowSecs: 30,
       minPushIntervalSecs: 0,

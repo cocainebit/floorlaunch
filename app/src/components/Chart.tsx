@@ -62,8 +62,8 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: "#1a1e25" },
-        horzLines: { color: "#1a1e25" },
+        vertLines: { visible: false },
+        horzLines: { color: "#1a2a1e", style: 2 },
       },
       rightPriceScale: { borderColor: "#232833" },
       timeScale: {
@@ -95,12 +95,22 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
     const area = chart.addSeries(AreaSeries, {
       lineColor: "#58c76f",
       lineWidth: 2,
-      topColor: "rgba(88, 199, 111, 0.28)",
+      lineType: 2,
+      topColor: "rgba(88, 199, 111, 0.22)",
       bottomColor: "rgba(88, 199, 111, 0.0)",
       priceLineStyle: 1,
       priceLineColor: "#58c76f",
       lastValueVisible: true,
-      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 5,
+      crosshairMarkerBorderColor: "#0a120c",
+      crosshairMarkerBackgroundColor: "#58c76f",
+      priceFormat: {
+        type: "custom",
+        minMove: 0.01,
+        formatter: (v: number) =>
+          v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v.toFixed(2)}`,
+      },
     });
     const vol = chart.addSeries(HistogramSeries, {
       priceScaleId: "vol",
@@ -124,6 +134,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
   useEffect(() => {
     candleRef.current?.applyOptions({ visible: mode === "candles" });
     volRef.current?.applyOptions({ visible: mode === "candles" });
+    indexRef.current?.applyOptions({ visible: mode === "candles" });
     areaRef.current?.applyOptions({ visible: mode === "line" });
   }, [mode]);
 
@@ -146,9 +157,24 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
           close: c.close * PER_UNIT,
         }))
       );
-      areaRef.current!.setData(
-        cs.map((c) => ({ time: c.time as UTCTimestamp, value: c.close * PER_UNIT * mult }))
-      );
+      {
+        // Forward-fill empty buckets so the line is continuous like a
+        // price ribbon rather than isolated trade blips.
+        const pts: { time: UTCTimestamp; value: number }[] = [];
+        if (cs.length) {
+          const now = Math.floor(Date.now() / 1000);
+          let ci = 0;
+          let last = cs[0].close;
+          for (let t = cs[0].time; t <= now; t += tf) {
+            while (ci < cs.length && cs[ci].time <= t) {
+              last = cs[ci].close;
+              ci++;
+            }
+            pts.push({ time: t as UTCTimestamp, value: last * PER_UNIT * mult });
+          }
+        }
+        areaRef.current!.setData(pts);
+      }
       volRef.current!.setData(
         cs.map((c) => ({
           time: c.time as UTCTimestamp,
@@ -162,7 +188,8 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
         .map((t) => ({ time: t.ts as UTCTimestamp, value: t.value * PER_UNIT * mult }));
       indexRef.current!.setData(line);
       lastCandle.current = cs[cs.length - 1] ?? null;
-      chartRef.current!.timeScale().scrollToRealTime();
+      if (modeRef.current === "line") chartRef.current!.timeScale().fitContent();
+      else chartRef.current!.timeScale().scrollToRealTime();
     })();
     return () => {
       dead = true;
@@ -215,6 +242,9 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
     });
   }, [lastTrade]);
 
+  const lastPrice =
+    lastCandle.current ? lastCandle.current.close * PER_UNIT * (solUsd > 0 ? solUsd : 1) : null;
+
   // Live index line updates.
   useEffect(() => {
     if (!lastIndexTick || !indexRef.current) return;
@@ -252,6 +282,13 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
               {t.label}
             </button>
           ))}
+        </div>
+        <div className="chart-big-price mono">
+          {lastPrice != null
+            ? lastPrice >= 1000
+              ? `$${(lastPrice / 1000).toFixed(1)}K`
+              : `$${lastPrice.toFixed(2)}`
+            : ""}
         </div>
         <div className="chart-legend">
           <span className="legend-item">

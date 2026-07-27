@@ -486,3 +486,4 @@ th.num, td.num { text-align: right; }
 .collectible-pay { display: flex; flex-direction: column; gap: 8px; }
 .collectible-pay .cta { margin-top: 6px; }
 .tf-divider { width: 1px; background: var(--border); margin: 2px 2px; }
+.chart-big-price { font-size: 20px; font-weight: 700; color: #e7ebf1; margin-left: auto; margin-right: 16px; }

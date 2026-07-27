@@ -135,7 +135,11 @@ export default function App() {
       ) : market ? (
         <main className="layout">
           <div className="col-main">
-            <UnderlyingStrip m={market} listing={listings[market.market]} />
+            <UnderlyingStrip
+              m={market}
+              listing={listings[market.market]}
+              lastTradePrice={trades[0]?.priceSol ?? null}
+            />
             <Chart
               market={market.market}
               solUsd={market.solUsd}

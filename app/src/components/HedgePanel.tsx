@@ -34,6 +34,18 @@ export default function HedgePanel({ m }: { m: MarketInfo }) {
     setBusy(false);
   }
 
+  if (m.status !== "live") {
+    return (
+      <div className="card hedge-card">
+        <div className="panel-title">
+          Hedge <span className="panel-sub">draw synth against SOL, sell it, keep your floor exposure flat</span>
+        </div>
+        <div className="dim form-note">
+          Hedging opens once the curve fills and the market migrates to the AMM.
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card hedge-card">
       <div className="panel-title">

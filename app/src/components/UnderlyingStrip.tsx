@@ -6,9 +6,11 @@ const PER_UNIT = 1_000_000;
 export default function UnderlyingStrip({
   m,
   listing,
+  lastTradePrice,
 }: {
   m: MarketInfo;
   listing?: ListingMeta;
+  lastTradePrice?: number | null;
 }) {
   const base = COLLECTION_META[m.collection] ?? FALLBACK_META;
   const meta = listing
@@ -22,14 +24,23 @@ export default function UnderlyingStrip({
     : base;
   const indexUnit = m.indexPerToken * PER_UNIT;
   // Pre-trade curve markets have no mark EMA; quote the curve's spot.
+  // Price shown = last trade (what the chart and trade tape show); the
+  // funding mark EMA stays an internal mechanism number.
   const markUnit =
-    m.markPerToken > 0
-      ? m.markPerToken * PER_UNIT
-      : m.curveVirtualTokens > 0
-        ? (m.curveVirtualSol / m.curveVirtualTokens) * PER_UNIT
-        : 0;
+    lastTradePrice != null && lastTradePrice > 0
+      ? lastTradePrice * PER_UNIT
+      : m.markPerToken > 0
+        ? m.markPerToken * PER_UNIT
+        : m.curveVirtualTokens > 0
+          ? (m.curveVirtualSol / m.curveVirtualTokens) * PER_UNIT
+          : 0;
+  // During the curve the price sits below the index by design (it opens at
+  // a quarter of the collectible's value and climbs); premium only means
+  // something once the market is live.
   const premium =
-    indexUnit > 0 && markUnit > 0 ? ((markUnit - indexUnit) / indexUnit) * 100 : null;
+    m.status === "live" && indexUnit > 0 && markUnit > 0
+      ? ((markUnit - indexUnit) / indexUnit) * 100
+      : null;
   // Feed freshness from the indexer's wall-clock ingestion time; the raw
   // on-chain timestamp lags on localnet where the validator clock drifts.
   const age = m.feedAgeSec ?? Math.floor(Date.now() / 1000 - m.indexLastTs);
@@ -62,7 +73,7 @@ export default function UnderlyingStrip({
           </div>
         </div>
         <div className="u-stat">
-          <div className="u-label">Token mark</div>
+          <div className="u-label">Price</div>
           <div className="u-value">
             {m.solUsd > 0 ? `$${(markUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${markUnit.toFixed(3)} SOL`}
             {m.solUsd > 0 && <span className="u-sub-val">{markUnit.toFixed(3)} SOL</span>}
