@@ -236,6 +236,10 @@ export default function TradePanel({ m, listing }: { m: MarketInfo; listing?: Li
                     {itemSwapTokens.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </span>
                 </div>
+                <div className="row">
+                  <span>Fee</span>
+                  <span className="mono">none: paying with the real thing is free</span>
+                </div>
                 <button
                   className="cta buy"
                   onClick={doDepositItem}
