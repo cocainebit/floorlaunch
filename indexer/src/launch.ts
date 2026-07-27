@@ -63,6 +63,39 @@ async function solUsd(): Promise<number> {
   return Number(p.price) * Math.pow(10, p.expo);
 }
 
+// Live oracle feed per collectible: Magic Eden floor for NFTs (5 min
+// cache), configured USD price via Pyth for cards. This is the value
+// launches initialize with and the refresher pushes; the allowlist
+// snapshot is only the fallback when the live source is down.
+const meCache = new Map<string, { at: number; floorSol: number | null }>();
+export async function meFloor(symbol: string): Promise<number | null> {
+  const hit = meCache.get(symbol);
+  if (hit && Date.now() - hit.at < 300_000) return hit.floorSol;
+  try {
+    const r = await fetch(`https://api-mainnet.magiceden.dev/v2/collections/${symbol}/stats`);
+    const b: any = await r.json();
+    const v = b?.floorPrice > 0 ? b.floorPrice / 1e9 : null;
+    meCache.set(symbol, { at: Date.now(), floorSol: v });
+    return v;
+  } catch {
+    meCache.set(symbol, { at: Date.now(), floorSol: null });
+    return null;
+  }
+}
+
+/** Oracle feed value in lamports for a catalog entry; null if no source. */
+export async function oracleFeedLamports(u: any, solUsdPrice: number): Promise<number | null> {
+  if (u.kind === "nft") {
+    const live = u.identifier?.startsWith("magiceden:")
+      ? await meFloor(u.identifier.split(":")[1])
+      : null;
+    const sol = live ?? u.snapshot?.floorSol ?? null;
+    return sol ? Math.round(sol * LAMPORTS) : null;
+  }
+  const usd = u.usdPrice ?? u.snapshot?.ccFloorUsd;
+  return usd && solUsdPrice > 0 ? Math.round((usd / solUsdPrice) * LAMPORTS) : null;
+}
+
 export function catalogByIdentifier(identifier: string): any | undefined {
   const catalog: any[] = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
   return catalog.find((c) => c.identifier === identifier);
@@ -84,14 +117,10 @@ export async function devLaunch(
     : catalog.find((c) => c.collectionId === body.collectionId);
   if (!u) throw new Error("unknown underlying");
 
-  // Initial index in lamports per unit, from the allowlist snapshot.
-  let indexLamports: number;
-  if (u.kind === "nft") {
-    indexLamports = Math.round(u.snapshot.floorSol * LAMPORTS);
-  } else {
-    const usd = u.usdPrice ?? u.snapshot.ccFloorUsd;
-    indexLamports = Math.round((usd / (await solUsd())) * LAMPORTS);
-  }
+  // Initial index in lamports, from the live oracle feed (snapshot as
+  // fallback inside the feed helper).
+  const indexLamports = (await oracleFeedLamports(u, await solUsd()))!;
+  if (!indexLamports) throw new Error("no oracle price available for this collectible");
 
   const admin = kp(ADMIN_KEY);
   const oracle = kp(ORACLE_KEY);

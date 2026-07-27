@@ -12,7 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
-import { devLaunch, loadListings, catalogByIdentifier } from "./launch.js";
+import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports } from "./launch.js";
 import {
   getOrCreateEscrow,
   startVerification,
@@ -345,22 +345,6 @@ app.get("/markets", async (_req, res) => {
 // Aggregator: every catalog collectible with all its price sources, the
 // spread between them, and the markets launched against it. Live Magic
 // Eden floors are fetched with a 5 minute cache.
-const meCache = new Map<string, { at: number; floorSol: number | null }>();
-async function meFloor(symbol: string): Promise<number | null> {
-  const hit = meCache.get(symbol);
-  if (hit && Date.now() - hit.at < 300_000) return hit.floorSol;
-  try {
-    const r = await fetch(`https://api-mainnet.magiceden.dev/v2/collections/${symbol}/stats`);
-    const b: any = await r.json();
-    const v = b?.floorPrice > 0 ? b.floorPrice / LAMPORTS_PER_SOL : null;
-    meCache.set(symbol, { at: Date.now(), floorSol: v });
-    return v;
-  } catch {
-    meCache.set(symbol, { at: Date.now(), floorSol: null });
-    return null;
-  }
-}
-
 app.get("/aggregator", async (_req, res) => {
   try {
     const catalog: any[] = JSON.parse(
@@ -402,7 +386,10 @@ app.get("/aggregator", async (_req, res) => {
             ? await meFloor(u.identifier.split(":")[1])
             : null;
         const markets = byId.get(u.identifier) ?? [];
-        const chainSol = markets.find((m) => m.onchainIndexSol)?.onchainIndexSol ?? null;
+        const feedLamports = await oracleFeedLamports(u, solUsd);
+        const chainSol =
+          markets.find((m) => m.onchainIndexSol)?.onchainIndexSol ??
+          (feedLamports ? feedLamports / LAMPORTS_PER_SOL : null);
         const sources = [snapshotSol, liveSol, chainSol].filter(
           (v): v is number => v != null && v > 0
         );
@@ -499,10 +486,7 @@ async function refreshOracles() {
       try {
         const u = catalogByIdentifier((meta as any).identifier);
         if (!u) continue;
-        const lamports =
-          u.kind === "nft"
-            ? Math.round(u.snapshot.floorSol * 1e9)
-            : Math.round(((u.usdPrice ?? u.snapshot.ccFloorUsd) / solUsd) * 1e9);
+        const lamports = (await oracleFeedLamports(u, solUsd)) ?? 0;
         if (!(lamports > 0)) continue;
         // The on-chain index is launch-scaled: 0.625 SOL per unit at
         // launch, moving with the collectible from there.
