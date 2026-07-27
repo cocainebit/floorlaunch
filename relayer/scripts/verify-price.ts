@@ -53,8 +53,8 @@ async function main() {
   const index = Number(m.indexTwap);
   const openSpot =
     (Number(m.curveVirtualSol) / Number(m.curveVirtualTokens)) * 1e12;
-  console.log(`index:      ${sol(index)} SOL/unit`);
-  console.log(`curve open: ${sol(openSpot)} SOL/unit (expect index/4 = ${sol(index / 4)})`);
+  console.log(`scaled index: ${sol(index)} SOL/unit (expect 0.6250, the migration price)`);
+  console.log(`curve open:   ${sol(openSpot)} SOL/unit (expect 0.0250 = 25 SOL MC on 1B supply)`);
 
   const mintPda = new PublicKey(m.synthMint);
   const [vaultPda] = PublicKey.findProgramAddressSync(
@@ -67,8 +67,9 @@ async function main() {
   );
   const userAta = anchor.utils.token.associatedAddress({ mint: mintPda, owner: admin.publicKey });
 
-  // 2. Staged buys: 2 + 3 + 6 SOL (crosses the 10 SOL target on the third).
-  for (const amt of [2, 3, 6]) {
+  // 2. Staged buys: 30 + 30 + 45 SOL (crosses the 100 SOL target on the
+  // third), so migration happens with 100+ SOL in the pool.
+  for (const amt of [30, 30, 45]) {
     await program.methods
       .curveBuy(new BN(amt).mul(new BN(LAMPORTS_PER_SOL)), new BN(0))
       .accountsPartial({ market: marketPda, synthMint: mintPda, solVault: vaultPda, user: admin.publicKey, userAta })

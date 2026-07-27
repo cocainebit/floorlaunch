@@ -92,8 +92,12 @@ export default function TradePanel({ m, listing }: { m: MarketInfo; listing?: Li
     }
   }
 
+  // One item is worth unitsPerItem launch-scale units; tokens received
+  // value the card at current prices.
   const itemSwapTokens =
-    m.markPerToken > 0 ? (m.indexPerToken * 1e6) / (m.markPerToken * 1e6) * 1e6 : 0;
+    m.markPerToken > 0
+      ? ((m.indexPerToken * (m.unitsPerItem ?? 1)) / m.markPerToken) * 1e6
+      : 0;
 
   async function doDepositItem() {
     if (!wallet.provider || !registered.length) return;
@@ -222,8 +226,8 @@ export default function TradePanel({ m, listing }: { m: MarketInfo; listing?: Li
                   <span>Item value (live index)</span>
                   <span className="mono">
                     {m.solUsd > 0
-                      ? `$${(m.indexPerToken * 1e6 * m.solUsd).toFixed(0)}`
-                      : `${(m.indexPerToken * 1e6).toFixed(3)} SOL`}
+                      ? `$${(m.cardIndexSol * m.solUsd).toFixed(0)}`
+                      : `${m.cardIndexSol.toFixed(3)} SOL`}
                   </span>
                 </div>
                 <div className="row">

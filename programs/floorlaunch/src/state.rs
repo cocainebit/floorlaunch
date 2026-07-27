@@ -54,10 +54,15 @@ pub struct MarketParams {
     pub liq_bonus_bps: u16,
     /// Cap on total CDP debt, token base units.
     pub max_open_interest: u64,
-    /// Preminted allocation backing item swaps, token base units. Each
-    /// deposited item releases TOKENS_PER_NFT from it; each withdrawal
-    /// returns them. Zero disables item swaps for the market.
+    /// Preminted allocation backing item swaps, token base units. Zero
+    /// disables item swaps for the market.
     pub item_reserve: u64,
+    /// How many synth units (1M tokens each) one physical item was worth
+    /// at launch, in millionths. The curve prices every launch at the
+    /// same 25 -> 100 SOL market cap span regardless of the underlying,
+    /// so the oracle index is launch-scaled and this factor carries the
+    /// item's real size into item swaps. 1_000_000 = one unit per item.
+    pub units_per_item_micro: u64,
     /// Curve trade fee, bps.
     pub curve_fee_bps: u16,
     /// AMM trade fee, bps.

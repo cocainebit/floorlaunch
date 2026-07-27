@@ -10,6 +10,8 @@ export interface MarketInfo {
   frozen: boolean;
   indexPerToken: number;
   markPerToken: number;
+  cardIndexSol: number;
+  unitsPerItem: number;
   indexLastTs: number;
   feedAgeSec: number | null;
   ammSolReserve: number;

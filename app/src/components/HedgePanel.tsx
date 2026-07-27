@@ -72,7 +72,9 @@ export default function HedgePanel({ m }: { m: MarketInfo }) {
         </div>
         <div className="row">
           <span>Floor exposure</span>
-          <span className="mono">{unitsMax > 0 ? `${unitsMax.toFixed(3)} units` : "–"}</span>
+          <span className="mono">
+            {unitsMax > 0 ? `${(unitsMax / (m.unitsPerItem || 1)).toFixed(3)} copies` : "–"}
+          </span>
         </div>
         <div className="row">
           <span>Liq. index</span>

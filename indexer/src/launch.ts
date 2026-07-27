@@ -116,13 +116,25 @@ export async function devLaunch(
     pid
   );
 
+  // Every launch prices identically, like any launchpad: 1B token
+  // supply, 25 SOL market cap open, migration once the curve has raised
+  // 100 SOL so the AMM pool starts with 100 SOL inside it. The
+  // underlying's price never touches the curve. vSol = 25 SOL virtual
+  // against the full 1B supply sells 800M tokens over the 100 SOL raise
+  // and closes at 0.625 SOL per 1M tokens (~625 SOL market cap). The
+  // oracle index is LAUNCH-SCALED: one unit (1M tokens) is defined as
+  // worth 0.625 SOL (the migration price) at launch and moves with the
+  // collectible from there, so premium, funding and the breaker stay
+  // meaningful and the AMM seeds at premium zero. unitsPerItemMicro
+  // carries the item's real size for item swaps.
+  const UNIT_LAMPORTS_AT_LAUNCH = 625_000_000; // 0.625 SOL per 1M tokens
+  const unitsPerItemMicro = Math.max(
+    1,
+    Math.round((indexLamports / UNIT_LAMPORTS_AT_LAUNCH) * 1e6)
+  );
   {
-    // Mirror the Meteora DBC valuation span (open at 25% of the migration
-    // valuation): the curve opens at index/4 and, after the 10 SOL raise,
-    // closes at the collectible's live index, so the AMM seeds on-peg.
-    // Math: price x4 over the raise needs ((vSol+R)/vSol)^2 = 4 -> vSol = R.
-    const vSol = 10n * BigInt(LAMPORTS);
-    const vTok = (vSol * 4n * BASE_UNITS_PER_NFT) / BigInt(indexLamports);
+    const vSol = 25n * BigInt(LAMPORTS);
+    const vTok = 1_000_000_000n * 1_000_000n; // full 1B supply on the curve
     const params = {
       indexWindowSecs: 30,
       minPushIntervalSecs: 0,
@@ -135,12 +147,15 @@ export async function devLaunch(
       initialCrBps: 15000,
       maintenanceCrBps: 12000,
       liqBonusBps: 500,
-      maxOpenInterest: new BN("100000000000000"),
-      itemReserve: new BN("100000000000000"),
+      maxOpenInterest: new BN("400000000000000"),
+      // Room for 25 deposited items at launch scale.
+      itemReserve: new BN(String(BigInt(unitsPerItemMicro) * 1_000_000n * 25n)),
+      unitsPerItemMicro: new BN(String(unitsPerItemMicro)),
       curveFeeBps: 70,
       ammFeeBps: 70,
-      graduationTargetSol: new BN(10).mul(new BN(LAMPORTS)),
-      insuranceShareBps: 1000,
+      graduationTargetSol: new BN(100).mul(new BN(LAMPORTS)),
+      // The full raise seeds the pool: migration means 100 SOL inside it.
+      insuranceShareBps: 0,
       curveVirtualSol: new BN(vSol.toString()),
       curveVirtualTokens: new BN(vTok.toString()),
     };
@@ -154,7 +169,7 @@ export async function devLaunch(
       })
       .rpc();
     await program.methods
-      .pushIndex(new BN(indexLamports))
+      .pushIndex(new BN(UNIT_LAMPORTS_AT_LAUNCH))
       .accountsPartial({
         global: globalPda,
         oracleAuthority: oracle.publicKey,
@@ -202,6 +217,8 @@ export async function devLaunch(
     ...body.meta,
     identifier: u.identifier,
     itemMints,
+    indexAtLaunchLamports: indexLamports,
+    unitsPerItemMicro,
     launchedAt: Math.floor(Date.now() / 1000),
   } as any;
   writeFileSync(LISTINGS_PATH, JSON.stringify(listings, null, 2));

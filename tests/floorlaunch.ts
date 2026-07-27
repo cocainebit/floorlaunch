@@ -47,6 +47,7 @@ describe("floorlaunch", () => {
     liqBonusBps: 500,
     maxOpenInterest: new BN("500000000000000"),
     itemReserve: new BN("100000000000000"),
+    unitsPerItemMicro: new BN(1_000_000),
     curveFeeBps: 100,
     ammFeeBps: 100,
     graduationTargetSol: new BN(10).mul(new BN(SOL)),

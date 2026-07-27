@@ -279,10 +279,22 @@ app.get("/markets", async (_req, res) => {
   try {
     const accounts = await (program.account as any).market.all();
     const solUsd = await getSolUsd();
+    const listings = loadListings();
     res.json(
-      accounts.map((a: any) => ({
+      accounts.map((a: any) => {
+        // The on-chain index is launch-scaled (0.625 SOL per unit at
+        // launch); recover the collectible's real price from the listing.
+        const meta: any = listings[a.publicKey.toBase58()];
+        const scaledUnitSol = Number(a.account.indexTwap) / LAMPORTS_PER_SOL;
+        const cardIndexSol =
+          meta?.indexAtLaunchLamports > 0
+            ? (scaledUnitSol / 0.625) * (meta.indexAtLaunchLamports / LAMPORTS_PER_SOL)
+            : scaledUnitSol;
+        return {
         market: a.publicKey.toBase58(),
         solUsd,
+        cardIndexSol,
+        unitsPerItem: (meta?.unitsPerItemMicro ?? 1_000_000) / 1_000_000,
         collection: a.account.collection.toBase58(),
         synthMint: a.account.synthMint.toBase58(),
         status: Object.keys(a.account.status)[0],
@@ -308,7 +320,8 @@ app.get("/markets", async (_req, res) => {
         graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
         maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
         itemsDeposited: a.account.itemsDeposited,
-      }))
+      };
+      })
     );
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -383,8 +396,12 @@ async function refreshOracles() {
             ? Math.round(u.snapshot.floorSol * 1e9)
             : Math.round(((u.usdPrice ?? u.snapshot.ccFloorUsd) / solUsd) * 1e9);
         if (!(lamports > 0)) continue;
+        // The on-chain index is launch-scaled: 0.625 SOL per unit at
+        // launch, moving with the collectible from there.
+        const atLaunch = (meta as any).indexAtLaunchLamports;
+        const scaled = atLaunch > 0 ? Math.round((lamports / atLaunch) * 625_000_000) : lamports;
         await prog.methods
-          .pushIndex(new (await import("bn.js")).default(lamports))
+          .pushIndex(new (await import("bn.js")).default(scaled))
           .accountsPartial({
             global: globalPda,
             oracleAuthority: oracle.publicKey,

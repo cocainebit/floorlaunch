@@ -23,6 +23,7 @@ export default function UnderlyingStrip({
       }
     : base;
   const indexUnit = m.indexPerToken * PER_UNIT;
+  const cardIndex = m.cardIndexSol ?? indexUnit;
   // Pre-trade curve markets have no mark EMA; quote the curve's spot.
   // Price shown = last trade (what the chart and trade tape show); the
   // funding mark EMA stays an internal mechanism number.
@@ -34,9 +35,9 @@ export default function UnderlyingStrip({
         : m.curveVirtualTokens > 0
           ? (m.curveVirtualSol / m.curveVirtualTokens) * PER_UNIT
           : 0;
-  // During the curve the price sits below the index by design (it opens at
-  // a quarter of the collectible's value and climbs); premium only means
-  // something once the market is live.
+  // Every launch opens at a 25 SOL market cap and migrates with 100 SOL
+  // in the pool; premium (token vs the collectible since launch) only
+  // means something once the market is live.
   const premium =
     m.status === "live" && indexUnit > 0 && markUnit > 0
       ? ((markUnit - indexUnit) / indexUnit) * 100
@@ -68,15 +69,22 @@ export default function UnderlyingStrip({
         <div className="u-stat">
           <div className="u-label">Floor index</div>
           <div className="u-value index-color">
-            {m.solUsd > 0 ? `$${(indexUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${indexUnit.toFixed(3)} SOL`}
-            {m.solUsd > 0 && <span className="u-sub-val">{indexUnit.toFixed(3)} SOL</span>}
+            {m.solUsd > 0 ? `$${(cardIndex * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${cardIndex.toFixed(3)} SOL`}
+            {m.solUsd > 0 && <span className="u-sub-val">{cardIndex.toFixed(3)} SOL</span>}
           </div>
         </div>
         <div className="u-stat">
           <div className="u-label">Price</div>
           <div className="u-value">
-            {m.solUsd > 0 ? `$${(markUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${markUnit.toFixed(3)} SOL`}
-            {m.solUsd > 0 && <span className="u-sub-val">{markUnit.toFixed(3)} SOL</span>}
+            {m.solUsd > 0 ? `$${(markUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${markUnit.toFixed(4)} SOL`}
+            {m.solUsd > 0 && <span className="u-sub-val">{markUnit.toFixed(4)} SOL</span>}
+          </div>
+        </div>
+        <div className="u-stat">
+          <div className="u-label">Market cap</div>
+          <div className="u-value">
+            {m.solUsd > 0 ? `$${(markUnit * 1000 * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}
+            <span className="u-sub-val">{(markUnit * 1000).toFixed(1)} SOL</span>
           </div>
         </div>
         <div className="u-stat">

@@ -44,6 +44,10 @@ pub mod floorlaunch {
         let params = params.unwrap_or(ctx.accounts.global.default_params);
         require!(params.curve_virtual_sol > 0, Err::ZeroAmount);
         require!(params.curve_virtual_tokens > 0, Err::ZeroAmount);
+        require!(
+            params.item_reserve == 0 || params.units_per_item_micro > 0,
+            Err::ZeroAmount
+        );
         {
             let m = &mut ctx.accounts.market;
             m.collection = collection;
@@ -796,9 +800,14 @@ pub mod floorlaunch {
         update_mark(m)?;
         require!(m.mark_ema > 0, Err::NoMark);
 
-        // Tokens equal in value to one item at current prices.
-        let tokens_out = ((m.index_twap as u128 * BASE_UNITS_PER_NFT)
-            / m.mark_ema as u128) as u64;
+        // Tokens equal in value to one item at current prices. The index
+        // is launch-scaled, so units_per_item_micro restores the item's
+        // real size.
+        let tokens_out = ((m.index_twap as u128
+            * BASE_UNITS_PER_NFT
+            * m.params.units_per_item_micro as u128)
+            / m.mark_ema as u128
+            / 1_000_000) as u64;
         require!(
             ctx.accounts.item_reserve.amount >= tokens_out,
             Err::ItemReserveDepleted
@@ -844,8 +853,11 @@ pub mod floorlaunch {
         require!(m.mark_ema > 0, Err::NoMark);
         require!(ctx.accounts.escrow_item.amount >= 1, Err::ItemNotInEscrow);
 
-        let tokens_in = ((m.index_twap as u128 * BASE_UNITS_PER_NFT)
-            / m.mark_ema as u128) as u64;
+        let tokens_in = ((m.index_twap as u128
+            * BASE_UNITS_PER_NFT
+            * m.params.units_per_item_micro as u128)
+            / m.mark_ema as u128
+            / 1_000_000) as u64;
         m.items_deposited = m.items_deposited.saturating_sub(1);
 
         token::transfer(
@@ -1134,7 +1146,7 @@ pub struct AdminMarket<'info> {
 #[instruction(collection: Pubkey)]
 pub struct CreateMarket<'info> {
     #[account(seeds = [b"global"], bump = global.bump, has_one = admin)]
-    pub global: Account<'info, Global>,
+    pub global: Box<Account<'info, Global>>,
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
@@ -1144,7 +1156,7 @@ pub struct CreateMarket<'info> {
         seeds = [b"market", collection.as_ref()],
         bump
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(
         init,
         payer = admin,
@@ -1153,7 +1165,7 @@ pub struct CreateMarket<'info> {
         mint::decimals = SYNTH_DECIMALS,
         mint::authority = market
     )]
-    pub synth_mint: Account<'info, Mint>,
+    pub synth_mint: Box<Account<'info, Mint>>,
     #[account(
         init,
         payer = admin,
@@ -1162,7 +1174,7 @@ pub struct CreateMarket<'info> {
         token::mint = synth_mint,
         token::authority = market
     )]
-    pub pool_token: Account<'info, TokenAccount>,
+    pub pool_token: Box<Account<'info, TokenAccount>>,
     #[account(
         init,
         payer = admin,
@@ -1171,7 +1183,7 @@ pub struct CreateMarket<'info> {
         token::mint = synth_mint,
         token::authority = market
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: Box<Account<'info, TokenAccount>>,
     #[account(
         init,
         payer = admin,
@@ -1180,7 +1192,7 @@ pub struct CreateMarket<'info> {
         token::mint = synth_mint,
         token::authority = market
     )]
-    pub item_reserve: Account<'info, TokenAccount>,
+    pub item_reserve: Box<Account<'info, TokenAccount>>,
     #[account(mut, seeds = [b"vault", market.key().as_ref()], bump)]
     pub sol_vault: SystemAccount<'info>,
     pub token_program: Program<'info, Token>,

@@ -20,7 +20,7 @@ const TFS = [
   { label: "1h", secs: 3600 },
 ];
 
-// Chart shows SOL per unit (1M tokens = 1 floor) so candles and the
+// Chart shows price per unit (1M tokens) so candles and the
 // oracle index share one readable scale.
 const PER_UNIT = 1_000_000;
 
@@ -298,7 +298,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
             <span className="legend-line" /> Floor index
           </span>
           <span className="legend-unit">
-            {mode === "line" ? "USD per unit" : "SOL per unit"} · 1M tokens = 1 floor · charting by TradingView
+            {mode === "line" ? "USD per 1M tokens" : "SOL per 1M tokens"} · charting by TradingView
           </span>
         </div>
       </div>

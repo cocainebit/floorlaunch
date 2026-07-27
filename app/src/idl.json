@@ -4496,9 +4496,19 @@
           {
             "name": "item_reserve",
             "docs": [
-              "Preminted allocation backing item swaps, token base units. Each",
-              "deposited item releases TOKENS_PER_NFT from it; each withdrawal",
-              "returns them. Zero disables item swaps for the market."
+              "Preminted allocation backing item swaps, token base units. Zero",
+              "disables item swaps for the market."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "units_per_item_micro",
+            "docs": [
+              "How many synth units (1M tokens each) one physical item was worth",
+              "at launch, in millionths. The curve prices every launch at the",
+              "same 25 -> 100 SOL market cap span regardless of the underlying,",
+              "so the oracle index is launch-scaled and this factor carries the",
+              "item's real size into item swaps. 1_000_000 = one unit per item."
             ],
             "type": "u64"
           },
