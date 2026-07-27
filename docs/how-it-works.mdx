@@ -17,7 +17,7 @@ SOL is the currency you trade with and the collateral hedgers post. It is never 
 
 ## 1. Listing
 
-A market is created for one collectible underlying: a specific card+grade (for example, PSA 10 of a given card), a basket of cards, or an NFT collection's floor. Market creation is admin-gated in v1, with listing criteria (sale frequency, depth, population) enforced at listing time. Creation initializes the market account, the synth mint (full supply preminted, mint authority revoked in the same transaction), a program-controlled SOL vault, and an AMM pool token account. See [Listing a market](/guides/listing-a-market).
+A market is created for one collectible underlying: a specific card+grade (for example, PSA 10 of a given card), a basket of cards, or an NFT collection's floor. Every launch gets its **own market and its own token**: the market's identifier is unique per launch, so the same collectible can be launched against any number of times, each launch with its own curve, supply, and creator. The program-level `create_market` is admin-gated in v1 and submitted by the launchpad service on the creator's behalf, with listing criteria (sale frequency, depth, population) enforced at listing time. Creation initializes the market account, the synth mint (full supply preminted across the curve allocation, hedge reserve, and item reserve, mint authority revoked in the same transaction), a program-controlled SOL vault, and an AMM pool token account. See [Listing a market](/guides/listing-a-market).
 
 ## 2. The index goes live
 
@@ -29,7 +29,7 @@ Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [stalen
 
 ## 3. Launch phase: the bonding curve
 
-The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads. The full fixed supply is preminted at market creation and the mint authority revoked in the same transaction; buys draw tokens from the curve allocation along the curve, sells return them for SOL. A curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
+The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads. The curve opens at **one quarter of the collectible's index** and is sized to close exactly **at the index** when the raise target is met, so early buyers get a discount to the real-world price and graduation hands the AMM a token already trading at parity. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
 
 <Note>
 External-venue markets skip stages 3 and 4 entirely: a token that launched on Meteora DBC attaches via `create_external_market`, starts directly in the live phase, and runs its CDP off a treasury reserve with an oracle-pushed mark. See [Venues](/concepts/amm#venues).
@@ -37,7 +37,7 @@ External-venue markets skip stages 3 and 4 entirely: a token that launched on Me
 
 ## 4. Graduation
 
-When the curve has raised its SOL target, anyone can call `graduate`:
+When the curve has raised its SOL target, the market **auto-migrates**: `graduate` is permissionless and the indexer keeper cranks it within seconds of the target being crossed, so no one has to press a button:
 
 <Steps>
   <Step title="Insurance fund seeded">
@@ -53,7 +53,7 @@ When the curve has raised its SOL target, anyone can call `graduate`:
 
 ## 5. Live phase
 
-Four things run continuously once a market is live.
+Five things run continuously once a market is live.
 
 **AMM trading.** Longs buy and sell the synth against the internal pool. Every swap updates the mark price EMA, which is the smoothed price the funding mechanism compares against the index. Single-transaction price spikes do not move funding or liquidation checks because all tether math reads the EMA, never spot.
 
@@ -63,9 +63,11 @@ Four things run continuously once a market is live.
 
 **Liquidations.** If a short's collateral ratio falls below maintenance (120% default), any liquidator can repay the position's debt from their own wallet (the tokens return to the reserve) and claim the collateral plus a bonus, with the insurance fund covering shortfalls. See [Liquidations](/concepts/liquidations).
 
+**Item swaps.** Holders of registered on-chain copies of the underlying (vaulted-card NFTs, collection NFTs) can deposit a copy into the market's escrow and receive tokens of equal value, priced at the index over the mark EMA; any token holder can do the reverse and take a copy out while escrow holds one. The collectible's own supply becomes market liquidity. See [Item swaps](/concepts/synth-token#item-swaps).
+
 ## The two-sided tether
 
-The synth has no redemption against the underlying, so what keeps it near the index?
+The synth has no fixed-rate redemption pot: [item swaps](/concepts/synth-token#item-swaps) are value-neutral exchanges, not a peg mechanism, and they depend on escrow inventory. So what keeps the price near the index?
 
 **Above the index:** drawing is profitable. A shorter can post collateral, draw synth from the reserve at index value, and sell it at the higher mark. That new circulating supply pushes the mark down. The premium also makes funding positive for shorts, paying anyone willing to hold the tether side. Together these cap sustained upside deviation.
 

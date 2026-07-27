@@ -1,6 +1,6 @@
 ---
 title: "Accounts"
-description: "Field-by-field reference for Global, Market, MarketParams, and ShortPosition"
+description: "Field-by-field reference for Global, Market, MarketParams, ShortPosition, and ItemRegistration"
 ---
 
 ## Constants
@@ -46,6 +46,7 @@ Embedded in both `Global` (defaults) and each `Market` (active values). Updatabl
 | `maintenance_cr_bps` | `u16` | Below this ratio a position is liquidatable |
 | `liq_bonus_bps` | `u16` | Liquidator bonus as bps of repaid debt value |
 | `max_open_interest` | `u64` | Cap on total CDP debt, in token base units |
+| `item_reserve` | `u64` | Preminted allocation backing [item swaps](/concepts/synth-token#item-swaps), in token base units; 0 disables item swaps for the market |
 | `curve_fee_bps` | `u16` | Trade fee during the launch curve |
 | `amm_fee_bps` | `u16` | Trade fee on the internal AMM |
 | `graduation_target_sol` | `u64` | Real SOL raised (lamports) that permits [graduation](/concepts/graduation) |
@@ -109,6 +110,7 @@ One per underlying at `["market", collection]`.
 | --- | --- | --- |
 | `insurance_lamports` | `u64` | Insurance fund balance inside the [SOL vault](/reference/pdas#the-sol-vault) |
 | `fee_lamports` | `u64` | Accrued protocol fees inside the SOL vault |
+| `items_deposited` | `u32` | Copies of the underlying currently held across the market's item escrows; incremented by `deposit_item`, decremented by `withdraw_item` |
 | `bump` / `vault_bump` / `mint_bump` / `treasury_bump` | `u8` | Stored PDA bumps (`mint_bump` is meaningless on external markets) |
 
 ### Helper math (on-chain)
@@ -119,6 +121,16 @@ scaled_from_debt(debt)   = ceil(debt * FUNDING_ONE / funding_index)
 value_at_index(units)    = units * index_twap / BASE_UNITS_PER_NFT
 amm_spot_per_nft()       = amm_sol_reserve * BASE_UNITS_PER_NFT / amm_token_reserve
 ```
+
+## ItemRegistration
+
+One per (market, item mint) at `["item", market, item_mint]`. Created by [`register_item`](/reference/instructions#register_item); its existence is what makes a specific on-chain copy (a vaulted-card NFT, a collection NFT) depositable via [item swaps](/concepts/synth-token#item-swaps).
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `market` | `Pubkey` | Market the item is registered for |
+| `item_mint` | `Pubkey` | The copy's SPL mint (0 decimals, supply 1) |
+| `bump` | `u8` | PDA bump |
 
 ## ShortPosition
 

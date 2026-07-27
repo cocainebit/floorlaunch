@@ -63,9 +63,10 @@ and AMM supply are bounded by the launch itself.
   </Step>
   <Step title="create_market">
     The admin calls `create_market(collection, params)`, which initializes the
-    market account, the synth mint, the pool and treasury token accounts, and the
-    SOL vault, premints the fixed supply (curve allocation plus hedging
-    reserve), and revokes the mint authority, all in one transaction. The
+    market account, the synth mint, the pool, treasury, and item reserve token
+    accounts, and the SOL vault, premints the fixed supply (curve allocation,
+    hedging reserve, and [item-swap reserve](/concepts/synth-token#item-swaps)),
+    and revokes the mint authority, all in one transaction. The
     `collection` pubkey is an opaque identifier: for cards it identifies the
     card+grade spec, for NFTs the collection mint.
   </Step>

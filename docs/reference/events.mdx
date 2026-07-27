@@ -83,6 +83,28 @@ Fires on every successful `accrue_funding` crank. See [Funding](/concepts/fundin
 | `mark` | `u64` | Mark EMA used, lamports per unit |
 | `index` | `u64` | Index TWAP used, lamports per unit |
 
+## ItemSwapped
+
+Fires on `deposit_item` and `withdraw_item`. See [Item swaps](/concepts/synth-token#item-swaps).
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `market` | `Pubkey` | |
+| `user` | `Pubkey` | Depositor or withdrawer |
+| `item_mint` | `Pubkey` | The registered copy that moved |
+| `deposited` | `bool` | `true` when a copy entered escrow (tokens paid out), `false` when one left (tokens paid in) |
+| `tokens` | `u64` | Base units exchanged, priced at `index_twap * 1e12 / mark_ema` at execution |
+
+## EscrowReleased
+
+Fires on every successful `release_escrow` sweep of an [identity escrow](/reference/pdas#identity-escrows).
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id_hash` | `[u8; 32]` | `sha256("platform:handle")`, the escrow's seed |
+| `recipient` | `Pubkey` | The verified wallet paid |
+| `amount` | `u64` | Lamports released |
+
 ## Liquidated
 
 Fires on every successful `liquidate`. See [Liquidations](/concepts/liquidations).

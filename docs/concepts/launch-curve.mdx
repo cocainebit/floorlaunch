@@ -18,7 +18,7 @@ Their ratio sets the opening price:
 opening price per base unit = curve_virtual_sol / curve_virtual_tokens
 ```
 
-A market listed against a 100 SOL floor might open with 10 SOL virtual against 100,000 tokens virtual, putting the curve's opening price at parity with the index (see [The Synth Token](/concepts/synth-token) for the unit math).
+The launchpad convention sets `curve_virtual_sol` equal to the graduation target. Constant-product algebra then makes the price multiple over the raise exactly `((v_sol + raise) / v_sol)^2 = 4`, so the virtual token side is chosen to open the curve at **one quarter of the index**: early buyers get a 4x discount to the collectible's live price, and the curve's closing price at graduation lands **exactly at the index**. A market listed against a 100 SOL card with a 10 SOL graduation target opens at 25 SOL per unit and graduates at 100 SOL per unit (see [The Synth Token](/concepts/synth-token) for the unit math).
 
 ## Buying
 
@@ -57,14 +57,14 @@ Sold tokens **return to the curve allocation** in the pool account, and `curve_s
 ## What backs curve tokens
 
 <Note>
-Tokens bought on the curve are backed by the SOL sitting in the vault, exactly like any launchpad token. They are not collateralized by shorts. Short-collateralized supply only exists after graduation, when [CDP shorts](/concepts/shorts) open. The two tranches are fungible in your wallet but their backing differs.
+Tokens bought on the curve are backed by the SOL sitting in the vault, exactly like any launchpad token. They are not collateralized by shorts. Short-collateralized supply only exists after graduation, when [CDP shorts](/concepts/shorts) open. The tranches are fungible in your wallet but their backing differs.
 </Note>
 
 During Bootstrap the token is honestly a launch-phase asset: its price is wherever the curve puts it, and the index tether (funding, mint/burn arbitrage) is not yet active. The tether switches on at [Graduation](/concepts/graduation).
 
 ## Ending the phase
 
-The curve runs until `curve_sol_raised` reaches `graduation_target_sol`, at which point anyone can call `graduate` and the market flips to Live. Curve instructions refuse to run afterward (`NotBootstrap`), and AMM instructions refuse to run before (`NotLive`).
+The curve runs until `curve_sol_raised` reaches `graduation_target_sol`, at which point the market migrates to Live. `graduate` is permissionless, and in practice nobody needs to call it manually: the indexer keeper sweeps bootstrap markets on a short interval (and immediately after every `CurveTraded` event) and cranks the transition as soon as the target is met. Curve instructions refuse to run afterward (`NotBootstrap`), and AMM instructions refuse to run before (`NotLive`).
 
 - Instructions: `curve_buy`, `curve_sell`, see [Instructions](/reference/instructions)
 - Event: `CurveTraded { market, user, is_buy, sol_amount, token_amount }`

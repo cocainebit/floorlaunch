@@ -39,7 +39,17 @@ description: "Definitions of every term used across the floorlaunch protocol and
 
 **Bonding curve.** The launch-phase pricing mechanism: a constant-product curve over virtual SOL and virtual token reserves. Buys draw from the preminted curve allocation, sells return to it; supply itself never changes.
 
-**Graduation.** The permissionless transition from Bootstrap to Live once the curve raises `graduation_target_sol`. Splits raised SOL into the insurance fund and the AMM's real reserve, and starts the funding clock.
+**Graduation.** The permissionless transition from Bootstrap to Live once the curve raises `graduation_target_sol`. Splits raised SOL into the insurance fund and the AMM's real reserve, and starts the funding clock. Cranked automatically by the indexer keeper, so markets auto-migrate within seconds of hitting the target.
+
+**Item swap.** The value-based exchange between a market's token and registered on-chain copies of its underlying: `deposit_item` places a copy in program escrow for `index_twap * 1e12 / mark_ema` base units of tokens, and `withdraw_item` returns the same formula's worth of tokens for a copy. Always equal value at execution, never a fixed tokens-per-item rate.
+
+**Item pool.** A market's escrowed inventory of deposited copies plus the item reserve that pays for them. Its size in copies is `Market.items_deposited`.
+
+**Item reserve.** The third preminted allocation of the fixed supply (parameter `item_reserve`, PDA seeds `["items", market]`), which funds item-swap payouts and receives item-swap repayments. Zero at creation disables item swaps for the market.
+
+**Item registration.** The admin-created PDA (`["item", market, item_mint]`) marking a specific copy (a vaulted-card NFT or collection NFT) as depositable into a market's item pool. Registration is admin-gated in v1 while vault provenance is verified off chain.
+
+**Identity escrow.** A keyless system-account PDA (`["escrow", sha256("platform:handle")]`) that accumulates a creator's fee share when a launch names a fee receiver by social handle instead of a wallet. Released to the creator's chosen wallet by the admin-signed `release_escrow` after an off-chain nonce-in-bio identity proof.
 
 **Insurance fund.** Per-market SOL reserve seeded at graduation (`insurance_share_bps` of the raise). Covers liquidation shortfalls when collateral is insufficient for the target payout.
 

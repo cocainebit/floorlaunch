@@ -40,17 +40,17 @@ On every other launchpad, a token is backed by nothing but attention. On floorla
     A signed feed reads the collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector Crypt, Magic Eden), filters manipulation, and writes the result on chain.
   </Step>
   <Step title="The token launches on a curve">
-    Anyone can buy from the first block; the launch works like any memecoin curve, but the token has a reference price from day one.
+    Anyone can buy from the first block; the launch works like any memecoin curve, but it opens at a quarter of the collectible's live price and auto-migrates to the AMM exactly at that price once the raise target is met.
   </Step>
   <Step title="The token tracks the collectible">
     Funding and hedger arbitrage pull the token's price toward the collectible's price, up and down. Card doubles, your exposure doubles.
   </Step>
 </Steps>
 
-The protocol never touches the collectible itself. There is no vault of cards or NFTs, no redemption queue, and no pooled collateral priced by an oracle. The tether comes from two forces instead: collateralized reserve arbitrage against the index (drawing fixed-supply tokens from a program treasury and returning them), and a clamped funding rate that pays whichever side pulls price back toward it. Every synth is a fixed-supply SPL token whose mint authority is revoked at creation.
+The protocol custodies nothing to back the token. There is no mandatory vault, no redemption queue, and no pooled collateral priced by an oracle. The tether comes from two forces instead: collateralized reserve arbitrage against the index (drawing fixed-supply tokens from a program treasury and returning them), and a clamped funding rate that pays whichever side pulls price back toward it. Every synth is a fixed-supply SPL token whose mint authority is revoked at creation. On top of that, markets can run an [item pool](/concepts/synth-token#item-swaps): holders of vaulted on-chain copies of the underlying deposit a copy and receive tokens of equal value, and anyone can swap tokens back for a copy, so the collectible's own supply becomes liquidity without ever being what the token's solvency depends on.
 
 <Note>
-The v1 program, oracle relayer, and external-venue (Meteora) support are built and tested locally but not yet deployed to a public cluster. Program ID: `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`. The physical delivery valve and graded-card API sources remain planned work; pages that describe them say so explicitly.
+The v1 program, oracle relayer, item swaps, and external-venue (Meteora) support are built and tested locally but not yet deployed to a public cluster. Program ID: `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`. Production graded-card API sources remain planned work; pages that describe them say so explicitly.
 </Note>
 
 ## Who it's for
@@ -63,7 +63,7 @@ The v1 program, oracle relayer, and external-venue (Meteora) support are built a
 
 Every earlier attempt at collectible price exposure died in one of two ways: vault models (fractionalization) filled with the worst items and amplified crashes, and oracle-settled perps got drained the first time someone manipulated a thin floor print. floorlaunch is shaped around those failure modes:
 
-- **No vault.** Nothing to fill with lemons, no custody honeypot, no reflexive redemption spiral.
+- **No vault dependency.** The token's solvency never rests on custodied items, so there is nothing to fill with lemons and no reflexive redemption spiral. The optional [item pool](/concepts/synth-token#item-swaps) escrows only admin-registered copies of the exact card+grade (fungible by construction) and prices every swap at live value, so it cannot be gamed by dumping inferior items at a fixed rate.
 - **Bounded oracle damage.** A bad index print cannot unlock anyone's funds. It can only tilt the funding rate, which is clamped per day, and a print that deviates too far from the TWAP trips a circuit breaker that freezes the market.
 - **A bounded hedge facility.** Each market premints a fixed hedge reserve that hedgers draw against collateral, sized against the real depth of the collectible's market. When the reserve is empty the facility is simply full, so the synthetic can never grow large enough to become the price setter for its own underlying.
 

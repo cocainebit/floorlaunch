@@ -5,12 +5,15 @@ description: "Where floorlaunch is today and what is planned, in order."
 
 ## Current status (v1)
 
-The core Anchor program is built and passing an 18-test integration suite on a
+The core Anchor program is built and passing a 20-test integration suite on a
 local validator: oracle pushes with EMA index and circuit breaker, bonding
 curve, graduation into the internal AMM, CDP shorts, clamped funding,
 liquidations with insurance top-up, the staleness guard, admin parameter
-updates, fee withdrawal, and an external-venue market running off a treasury
-reserve with an oracle-pushed mark.
+updates, fee withdrawal, keyless [identity fee
+escrows](/reference/pdas#identity-escrows), value-based [item
+swaps](/concepts/synth-token#item-swaps) against registered vaulted copies,
+and an external-venue market running off a treasury reserve with an
+oracle-pushed mark.
 
 The v1 price feed (the [relayer](/oracle/architecture)) is built (TypeScript,
 `relayer/` in the repo): Magic Eden listing-ladder estimation for NFT floors, a live keyless
@@ -70,13 +73,16 @@ Done: a per-market `max_index_age_secs` now rejects `open_short`,
 `update_market_params` instruction (curve virtuals immutable). See the
 [staleness guard](/concepts/price-index#staleness-guard).
 
-### Physical delivery valve
+### Physical delivery valve (shipped as item swaps)
 
-An arbitrage-triggered pressure valve for card markets: deliver a vaulted-card
-NFT (Collector Crypt style, redeemable for the physical card) of the matching
-card and grade to the program at index value; the NFT is auctioned and
-proceeds join the collateral pool. One-directional and transient, so it
-anchors premiums with real assets without becoming a custody vault.
+Superseded by something stronger than the original one-directional design:
+[item swaps](/concepts/synth-token#item-swaps) let holders deposit a
+registered vaulted-card NFT of the matching card+grade for tokens of equal
+value at current prices, and let any token holder swap tokens back for a copy
+from escrow. Bidirectional, value-based (index over mark EMA, so no fixed
+tokens-per-item rate to game), and funded by a preminted item reserve so
+supply stays fixed. Remaining on this path: on-chain collection verification
+to replace admin-gated `register_item`.
 
 ### Long-side staked funding
 

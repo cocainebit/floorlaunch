@@ -15,14 +15,14 @@ The underlying unit is one card at one grade: for example, PSA 10 of a specific 
 
 **Price data exists as a product.** Per-card, per-grade prices aggregated from eBay and TCGplayer are available through commercial APIs, and tokenized venues (Collector Crypt, Courtyard) provide cross-checks, including capitalized instant-buyback bids. The [card pipeline](/oracle/card-pipeline) page covers the estimator in detail.
 
-**Currency conversion.** Card prices are dollar-denominated and the index is in lamports, so the relayer converts through Pyth SOL/USD. Holders should understand the consequence: the synth is long the card in SOL terms, so it carries card-versus-SOL relative exposure.
+**Currency conversion.** Card prices are dollar-denominated and the index is in lamports, so the relayer converts through Pyth SOL/USD. Holders should understand the consequence: the synth is long the card in SOL terms, so it carries card-versus-SOL relative exposure. The app displays prices, charts, and holder values in USD (converted through the same cached Pyth SOL/USD rate), but that is a display layer only: every pool is SOL-paired and settles in SOL on chain.
 
 **Basket indexes.** A market can track a weighted basket (for example, a vintage PSA 10 index) instead of a single card. Baskets are the most manipulation-resistant markets, since moving the index means moving many independent card markets at once.
 
 **Listing policy.** Mid-tier cards with large graded populations and steady weekly sale flow, not pop-10 grails where three sales are the whole market.
 
 <Note>
-The physical delivery valve, where a vaulted-card NFT of matching card+grade (for example, via Collector Crypt) can be delivered to arb a hot synth back to the index, is planned for v2 and not part of the current program.
+Vaulted-card NFTs of the matching card+grade (for example, via Collector Crypt) plug directly into the market through [item swaps](/concepts/synth-token#item-swaps): deposit a registered copy for tokens of equal value, or swap tokens back for a copy from escrow. The card's own vaulted supply is the market's physical liquidity.
 </Note>
 
 ## NFT collection floors (secondary)

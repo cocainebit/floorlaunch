@@ -7,7 +7,7 @@ description: "The permissionless transition from bonding curve to live market: s
 
 ## Preconditions
 
-`graduate()` is **permissionless**: anyone can crank it once the conditions hold. The call requires:
+`graduate()` is **permissionless**: anyone can crank it once the conditions hold. In practice migration is automatic: the indexer keeper sweeps every bootstrap market on a short interval, and additionally reacts to each `CurveTraded` event, so the transition lands within seconds of the raise target being crossed with no manual step for the creator or buyers. The call requires:
 
 1. Market status is `Bootstrap` (a market can only graduate once)
 2. Market is not [frozen](/concepts/circuit-breaker)
@@ -38,7 +38,7 @@ The AMM's token side comes out of the unsold curve allocation, sized so the pool
 amm_tokens = amm_sol * curve_virtual_tokens / curve_virtual_sol
 ```
 
-Since `curve_virtual_sol / curve_virtual_tokens` is the price where the curve ended, the pool's opening spot equals that price, and graduation itself causes no price gap. The seed stays in the market's pool token account, a program-controlled account no person can sign for.
+Since `curve_virtual_sol / curve_virtual_tokens` is the price where the curve ended, the pool's opening spot equals that price, and graduation itself causes no price gap. Under the launch convention (curve opens at a quarter of the index and spans 4x over the raise; see [Launch curve](/concepts/launch-curve)), the closing price is the index itself, so the AMM opens trading at the collectible's live price. The seed stays in the market's pool token account, a program-controlled account no person can sign for.
 
 **The unsold excess burns.** The pool account still holds every curve-allocation token that was never sold; graduation keeps exactly `amm_tokens` and burns the rest (a burn needs only the market's authority over its own token account, not the revoked mint authority). Supply after graduation is exactly tokens sold on the curve + the AMM seed + the hedging reserve, and it can never grow again.
 

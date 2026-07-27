@@ -17,19 +17,24 @@ your token.
 </Accordion>
 
 <Accordion title="Is the token backed by real cards or NFTs?">
-No. floorlaunch holds no cards, no NFTs, and runs no vault. The token is a
-synthetic: CDP supply drawn from the reserve is backed by shorts' SOL
-collateral, and the price is tethered to the oracle index by arbitrage and
-[funding](/concepts/funding). This is deliberate: no custody means no lemons
-problem, no custody honeypot, and no oracle-priced redemption to drain.
+Not in the vault sense. The token is a synthetic: CDP supply drawn from the
+reserve is backed by shorts' SOL collateral, and the price is tethered to the
+oracle index by arbitrage and [funding](/concepts/funding). The token's
+solvency never depends on custodied items, so there is no lemons problem and
+no oracle-priced redemption pot to drain. Markets can additionally hold an
+[item pool](/concepts/synth-token#item-swaps): registered vaulted copies of
+the underlying that holders have deposited for value-equal tokens. Those
+copies sit in a keyless program escrow and anyone can swap tokens back for
+one, but they are exchange inventory, not backing the supply depends on.
 </Accordion>
 
 <Accordion title="Is the supply fixed? Can the team mint more?">
 No one can mint more, ever. Every floorlaunch token is a fixed-supply SPL
-token: on the internal venue the entire allocation (curve supply plus the
-hedging reserve) is preminted at market creation and the mint authority is
-revoked in the same transaction, which is what wallets and screeners show as
-"mint revoked". Externally launched tokens arrive with fixed supply already.
+token: on the internal venue the entire allocation (curve supply, the hedging
+reserve, and the item-swap reserve) is preminted at market creation and the
+mint authority is revoked in the same transaction, which is what wallets and
+screeners show as "mint revoked". Externally launched tokens arrive with
+fixed supply already.
 The hedging facility is a preminted reserve allocation, not an inflation
 mechanism, and the unsold curve allocation burns at
 [graduation](/concepts/graduation), so supply can only ever shrink.
@@ -69,10 +74,14 @@ the SOL raised into the pool, like any launchpad token.
 </Accordion>
 
 <Accordion title="Can I redeem the token for a card or an NFT?">
-Not in v1. A one-directional physical delivery valve (deliver a vaulted-card
-NFT at index value when the token trades rich) is planned; see the
-[roadmap](/roadmap). Redemption the other way, token to physical, is not
-planned; that would make the protocol a vault, which the design rejects.
+Yes, when the market's item escrow holds one. [Item
+swaps](/concepts/synth-token#item-swaps) work in both directions and are
+value-based: deposit a registered vaulted copy and receive tokens worth
+exactly one copy at current prices (`index / mark EMA` units of tokens), or
+return that much token value and take a copy out of escrow. There is no fixed
+tokens-per-item rate and no redemption queue; withdrawals are first-come
+while escrowed copies last, and a market whose escrow is empty is back to
+pure synthetic exposure until someone deposits.
 </Accordion>
 
 <Accordion title="Why is collateral SOL only?">
