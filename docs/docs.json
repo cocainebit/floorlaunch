@@ -35,48 +35,6 @@
             ]
           },
           {
-            "group": "Core Concepts",
-            "pages": [
-              "concepts/price-index",
-              "concepts/launch-curve",
-              "concepts/graduation",
-              "concepts/amm",
-              "concepts/synth-token",
-              "concepts/shorts",
-              "concepts/funding",
-              "concepts/liquidations",
-              "concepts/insurance-fund",
-              "concepts/circuit-breaker",
-              "concepts/parameters"
-            ]
-          },
-          {
-            "group": "Oracle & Relayer",
-            "pages": [
-              "oracle/architecture",
-              "oracle/card-pipeline",
-              "oracle/nft-pipeline",
-              "oracle/operations"
-            ]
-          },
-          {
-            "group": "Program Reference",
-            "pages": [
-              "reference/pdas",
-              "reference/accounts",
-              "reference/instructions",
-              "reference/events",
-              "reference/errors"
-            ]
-          },
-          {
-            "group": "Security",
-            "pages": [
-              "security/risks",
-              "security/attack-vectors"
-            ]
-          },
-          {
             "group": "Project",
             "pages": [
               "roadmap",
@@ -117,7 +75,55 @@
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "Protocol",
+        "icon": "cpu",
+        "groups": [
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/price-index",
+              "concepts/launch-curve",
+              "concepts/graduation",
+              "concepts/amm",
+              "concepts/synth-token",
+              "concepts/shorts",
+              "concepts/funding",
+              "concepts/liquidations",
+              "concepts/insurance-fund",
+              "concepts/circuit-breaker",
+              "concepts/parameters"
+            ]
+          },
+          {
+            "group": "Oracle & Relayer",
+            "pages": [
+              "oracle/architecture",
+              "oracle/card-pipeline",
+              "oracle/nft-pipeline",
+              "oracle/operations"
+            ]
+          },
+          {
+            "group": "Program Reference",
+            "pages": [
+              "reference/pdas",
+              "reference/accounts",
+              "reference/instructions",
+              "reference/events",
+              "reference/errors"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "security/risks",
+              "security/attack-vectors"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API",
         "icon": "square-terminal",
         "groups": [
           {
@@ -161,8 +167,8 @@
   "navbar": {
     "links": [
       {
-        "label": "GitHub",
-        "href": "https://github.com/cocainebit/floorlaunch"
+        "label": "floorlaunch.xyz",
+        "href": "https://floorlaunch.xyz"
       }
     ],
     "primary": {
