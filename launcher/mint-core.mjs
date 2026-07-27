@@ -18,7 +18,7 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { TurboFactory } from "@ardrive/turbo-sdk";
 import { create, mplCore } from "@metaplex-foundation/mpl-core";
 import { generateSigner, keypairIdentity, publicKey } from "@metaplex-foundation/umi";
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import bs58 from "bs58";
 
@@ -82,6 +82,26 @@ async function uploadBytes(bytes, contentType) {
   });
   return `https://arweave.net/${res.id}`;
 }
+// Files above the free tier need Turbo credits: price the batch and top
+// up from the payer wallet if the credit balance falls short.
+async function ensureCredits(fileSizes) {
+  const costs = await turbo.getUploadCosts({ bytes: fileSizes });
+  const needed = costs.reduce((a, c) => a + BigInt(c.winc), 0n);
+  const bal = BigInt((await turbo.getBalance()).winc);
+  console.log(`turbo credits: have ${bal} winc, need ~${needed} winc`);
+  if (bal >= needed) return;
+  const lamports = 25_000_000; // 0.025 SOL buys comfortable margin
+  console.log(`topping up ${lamports / 1e9} SOL of Turbo credits...`);
+  const r = await turbo.topUpWithTokens({ tokenAmount: lamports });
+  console.log(`top-up id: ${r?.id ?? JSON.stringify(r).slice(0, 120)}`);
+  for (let i = 0; i < 30; i++) {
+    const nb = BigInt((await turbo.getBalance()).winc);
+    if (nb >= needed) { console.log(`credits ready: ${nb} winc`); return; }
+    await new Promise((res) => setTimeout(res, 4000));
+  }
+  throw new Error("turbo top-up did not credit in time");
+}
+
 const owner =
   ownerArg === "self"
     ? parsed.ownerOverride
@@ -100,6 +120,8 @@ const images = readdirSync(dir)
   .sort();
 if (!images.length) throw new Error("no images in " + dir);
 console.log(`images:  ${images.join(", ")}`);
+
+await ensureCredits(images.map((f) => statSync(join(dir, f)).size).concat(images.map(() => 2048)));
 
 const results = [];
 for (const [i, file] of images.entries()) {
