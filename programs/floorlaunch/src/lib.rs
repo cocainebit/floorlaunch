@@ -58,6 +58,11 @@ pub mod floorlaunch {
             m.params = params;
             m.curve_virtual_sol = params.curve_virtual_sol;
             m.curve_virtual_tokens = params.curve_virtual_tokens;
+            // Seed the mark with the curve's opening price so value-based
+            // item swaps work from the first block.
+            m.mark_ema = ((params.curve_virtual_sol as u128 * BASE_UNITS_PER_NFT)
+                / params.curve_virtual_tokens as u128) as u64;
+            m.mark_last_ts = Clock::get()?.unix_timestamp;
             m.funding_index = FUNDING_ONE;
             m.bump = ctx.bumps.market;
             m.vault_bump = ctx.bumps.sol_vault;
@@ -250,6 +255,7 @@ pub mod floorlaunch {
 
         m.curve_virtual_sol += net_in;
         m.curve_virtual_tokens -= tokens_out;
+        update_mark(m)?;
         m.curve_sol_raised += net_in;
         m.curve_tokens_sold += tokens_out;
         m.fee_lamports += fee;
@@ -291,6 +297,7 @@ pub mod floorlaunch {
         require!(sol_out >= min_sol_out, Err::Slippage);
 
         m.curve_virtual_tokens += tokens_in;
+        update_mark(m)?;
         m.curve_virtual_sol -= sol_gross;
         m.curve_sol_raised -= sol_gross;
         m.curve_tokens_sold -= tokens_in;
@@ -348,7 +355,12 @@ pub mod floorlaunch {
         m.amm_token_reserve = amm_tokens;
         m.status = MarketStatus::Live;
         let now = Clock::get()?.unix_timestamp;
-        m.mark_ema = m.amm_spot_per_nft();
+        // The mark EMA has been fed by the curve all through bootstrap and
+        // the AMM seeds at the curve's closing price, so it carries over
+        // continuously; just refresh the clock.
+        if m.mark_ema == 0 {
+            m.mark_ema = m.amm_spot_per_nft();
+        }
         m.mark_last_ts = now;
         m.funding_last_ts = now;
 
@@ -794,7 +806,6 @@ pub mod floorlaunch {
     /// come from the preminted item reserve, so supply stays fixed.
     pub fn deposit_item(ctx: Context<ItemSwap>) -> Result<()> {
         let m = &mut ctx.accounts.market;
-        require!(m.status == MarketStatus::Live, Err::NotLive);
         require!(!m.frozen, Err::Frozen);
         require_fresh_index(m)?;
         update_mark(m)?;
@@ -846,7 +857,6 @@ pub mod floorlaunch {
     /// Return tokens worth one item and take a copy out of the escrow.
     pub fn withdraw_item(ctx: Context<ItemSwap>) -> Result<()> {
         let m = &mut ctx.accounts.market;
-        require!(m.status == MarketStatus::Live, Err::NotLive);
         require!(!m.frozen, Err::Frozen);
         require_fresh_index(m)?;
         update_mark(m)?;
@@ -938,7 +948,23 @@ fn require_fresh_index(m: &Market) -> Result<()> {
 
 fn update_mark(m: &mut Market) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
-    let spot = m.amm_spot_per_nft();
+    // Bootstrap markets have no AMM yet; the curve's virtual-reserve spot
+    // is the venue price, so the mark EMA (and with it item swaps) works
+    // in both phases with the same smoothing.
+    let spot = match m.status {
+        MarketStatus::Live => m.amm_spot_per_nft(),
+        MarketStatus::Bootstrap => {
+            if m.curve_virtual_tokens == 0 {
+                0
+            } else {
+                ((m.curve_virtual_sol as u128 * BASE_UNITS_PER_NFT)
+                    / m.curve_virtual_tokens as u128) as u64
+            }
+        }
+    };
+    if spot == 0 {
+        return Ok(());
+    }
     let dt = now - m.mark_last_ts;
     if dt > 0 {
         m.mark_ema = ema_step(m.mark_ema, spot, dt, m.params.mark_window_secs);

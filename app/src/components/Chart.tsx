@@ -43,13 +43,18 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
   const lastCandle = useRef<Candle | null>(null);
   const [tf, setTf] = useState(15);
   const [mode, setMode] = useState<"line" | "candles">("line");
+  // Denomination toggle: per-token price, or market cap (price x 1B supply).
+  const [denom, setDenom] = useState<"price" | "mcap">("price");
   const tfRef = useRef(tf);
   tfRef.current = tf;
-  // Line mode plots USD; candle mode plots SOL per unit.
+  // Line mode plots USD; candle mode plots SOL per token.
   const usdRef = useRef(1);
-  usdRef.current = mode === "line" && solUsd > 0 ? solUsd : 1;
+  usdRef.current =
+    (mode === "line" && solUsd > 0 ? solUsd : 1) * (denom === "mcap" ? 1e9 : 1);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const denomRef = useRef(denom);
+  denomRef.current = denom;
 
   useEffect(() => {
     if (!holder.current) return;
@@ -149,13 +154,14 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
       ]);
       if (dead || !candleRef.current) return;
       const mult = usdRef.current;
+      const cScale = PER_UNIT * (denomRef.current === "mcap" ? 1e9 : 1);
       candleRef.current.setData(
         cs.map((c) => ({
           time: c.time as UTCTimestamp,
-          open: c.open * PER_UNIT,
-          high: c.high * PER_UNIT,
-          low: c.low * PER_UNIT,
-          close: c.close * PER_UNIT,
+          open: c.open * cScale,
+          high: c.high * cScale,
+          low: c.low * cScale,
+          close: c.close * cScale,
         }))
       );
       {
@@ -195,7 +201,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
     return () => {
       dead = true;
     };
-  }, [market, tf, mode]);
+  }, [market, tf, mode, denom]);
 
   // Live candle updates from the WS trade stream.
   useEffect(() => {
@@ -225,12 +231,13 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
       };
     }
     lastCandle.current = c;
+    const cScale = PER_UNIT * (denomRef.current === "mcap" ? 1e9 : 1);
     candleRef.current.update({
       time: c.time as UTCTimestamp,
-      open: c.open * PER_UNIT,
-      high: c.high * PER_UNIT,
-      low: c.low * PER_UNIT,
-      close: c.close * PER_UNIT,
+      open: c.open * cScale,
+      high: c.high * cScale,
+      low: c.low * cScale,
+      close: c.close * cScale,
     });
     volRef.current!.update({
       time: c.time as UTCTimestamp,
@@ -243,8 +250,12 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
     });
   }, [lastTrade]);
 
-  const lastPrice =
-    lastCandle.current ? lastCandle.current.close * PER_UNIT * (solUsd > 0 ? solUsd : 1) : null;
+  const lastPrice = lastCandle.current
+    ? lastCandle.current.close *
+      PER_UNIT *
+      (solUsd > 0 ? solUsd : 1) *
+      (denom === "mcap" ? 1e9 : 1)
+    : null;
 
   // Live index line updates.
   useEffect(() => {
@@ -274,6 +285,21 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
             ▮
           </button>
           <span className="tf-divider" />
+          <button
+            className={`tf-btn ${denom === "price" ? "active" : ""}`}
+            onClick={() => setDenom("price")}
+            title="Token price"
+          >
+            P
+          </button>
+          <button
+            className={`tf-btn ${denom === "mcap" ? "active" : ""}`}
+            onClick={() => setDenom("mcap")}
+            title="Market cap"
+          >
+            MC
+          </button>
+          <span className="tf-divider" />
           {TFS.map((t) => (
             <button
               key={t.secs}
@@ -299,7 +325,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
             <span className="legend-line" /> Floor index
           </span>
           <span className="legend-unit">
-            {mode === "line" ? "USD per token" : "SOL per token"} · charting by TradingView
+            {denom === "mcap" ? (mode === "line" ? "market cap, USD" : "market cap, SOL") : mode === "line" ? "USD per token" : "SOL per token"} · charting by TradingView
           </span>
         </div>
       </div>

@@ -98,7 +98,7 @@ Mechanics:
 - Only **registered** copies are accepted. [`register_item`](/reference/instructions#register_item) creates an `ItemRegistration` PDA per (market, item mint); registration is admin-gated in v1 while the relayer verifies vault provenance off chain.
 - Deposited copies sit in a market-authority escrow (one ATA per item mint); `Market.items_deposited` counts them and `ItemSwapped` fires on every swap. See [Events](/reference/events#itemswapped).
 - Deposit tokens come from the **item reserve** (`["items", market]`), a third preminted allocation sized by `params.item_reserve` at creation, so supply stays fixed. `ItemReserveDepleted` bounds the facility exactly like the treasury bounds shorts; withdrawals refill the reserve. A market created with `item_reserve = 0` has no item facility, and creating one with `item_reserve > 0` requires `units_per_item_micro > 0` (`ZeroAmount` otherwise). The launch executor sizes the reserve for 25 deposited items at launch scale.
-- Both directions require a Live, unfrozen market with a fresh index and a nonzero mark.
+- Both directions work in **either phase**, curve or AMM: during Bootstrap the mark EMA is seeded at the curve's opening price and stepped by every curve trade, so a copy can be deposited from the first block. The market must be unfrozen with a fresh index and a nonzero mark.
 
 **Why the mark EMA and not spot.** Pricing the swap off the AMM spot would make it sandwichable: buy the pool up, deposit a copy into the inflated price, dump. The mark EMA moves by at most `min(dt, window)/window` per block, so a single-transaction price spike barely moves the swap rate. The same smoothing that protects [funding](/concepts/funding) protects item swaps.
 

@@ -9,7 +9,7 @@ Custom errors start at Anchor's standard offset (6000). Anchor constraint violat
 | --- | --- | --- | --- |
 | `Unauthorized` | unauthorized | `push_index`, `push_mark`, `liquidate` | Signer is not `Global.oracle_authority`; or the `position_owner` account does not match `position.owner` |
 | `NotBootstrap` | market is not in bootstrap phase | `curve_buy`, `curve_sell`, `graduate` | Curve operations after graduation |
-| `NotLive` | market is not live | `amm_buy`, `amm_sell`, `open_short`, `accrue_funding`, `liquidate`, `deposit_item`, `withdraw_item` | Live-phase operations before graduation |
+| `NotLive` | market is not live | `amm_buy`, `amm_sell`, `open_short`, `accrue_funding`, `liquidate` | Live-phase operations before graduation |
 | `Frozen` | market is frozen | `push_index`, `push_mark`, `curve_buy`, `curve_sell`, `graduate`, `amm_buy`, `amm_sell`, `open_short`, `withdraw_collateral`, `repay_burn`, `accrue_funding`, `liquidate`, `deposit_item`, `withdraw_item` | The [circuit breaker](/concepts/circuit-breaker) is set. Only `add_collateral` and admin instructions still work; oracle pushes are refused so the TWAP cannot be walked during a freeze |
 | `NotFrozen` | market is not frozen | (currently unused) | Reserved; `set_frozen` accepts either direction without checking prior state |
 | `PushTooSoon` | oracle push too soon after previous push | `push_index`, `push_mark` | Less than `min_push_interval_secs` since the last push |

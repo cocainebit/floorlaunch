@@ -859,6 +859,127 @@ describe("floorlaunch", () => {
     }
   });
 
+  it("swaps items during bootstrap off the curve-fed mark", async () => {
+    // Fresh market that never graduates: item swaps must work on the
+    // curve too, priced off the mark EMA seeded from the curve spot.
+    const coll2 = Keypair.generate().publicKey;
+    const [m2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market"), coll2.toBuffer()],
+      program.programId
+    );
+    const [mint2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("mint"), m2.toBuffer()],
+      program.programId
+    );
+    const [pool2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pool"), m2.toBuffer()],
+      program.programId
+    );
+    const [vault2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), m2.toBuffer()],
+      program.programId
+    );
+    const [items2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("items"), m2.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .createMarket(coll2, null)
+      .accountsPartial({
+        global: globalPda,
+        admin: payer.publicKey,
+        market: m2,
+        synthMint: mint2,
+        poolToken: pool2,
+        itemReserve: items2,
+        solVault: vault2,
+      })
+      .rpc();
+    await program.methods
+      .pushIndex(INDEX0)
+      .accountsPartial({ global: globalPda, oracleAuthority: oracle.publicKey, market: m2 })
+      .signers([oracle])
+      .rpc();
+    const created: any = await program.account.market.fetch(m2);
+    assert.deepEqual(created.status, { bootstrap: {} });
+    // Mark seeded at the curve's opening spot.
+    const openSpot = new BN(created.curveVirtualSol.toString())
+      .mul(new BN("1000000000000"))
+      .div(new BN(created.curveVirtualTokens.toString()));
+    assert.equal(created.markEma.toString(), openSpot.toString());
+
+    const itemMint2 = await createMint(connection, payer.payer, payer.publicKey, null, 0);
+    const userItem2 = await createAssociatedTokenAccount(
+      connection, payer.payer, itemMint2, shorter.publicKey
+    );
+    await mintTo(connection, payer.payer, itemMint2, userItem2, payer.payer, 1);
+    const [reg2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("item"), m2.toBuffer(), itemMint2.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .registerItem()
+      .accountsPartial({
+        global: globalPda,
+        admin: payer.publicKey,
+        market: m2,
+        itemMint: itemMint2,
+        registration: reg2,
+      })
+      .rpc();
+
+    const userToken2 = await createAssociatedTokenAccount(
+      connection, payer.payer, mint2, shorter.publicKey
+    );
+    const mPre: any = await program.account.market.fetch(m2);
+    const expected = new BN(mPre.indexTwap.toString())
+      .mul(new BN("1000000000000"))
+      .div(new BN(mPre.markEma.toString()));
+    await program.methods
+      .depositItem()
+      .accountsPartial({
+        market: m2,
+        itemMint: itemMint2,
+        registration: reg2,
+        itemReserve: items2,
+        user: shorter.publicKey,
+        userItem: userItem2,
+        synthMint: mint2,
+        userToken: userToken2,
+      })
+      .signers([shorter])
+      .rpc();
+    const got = new BN(
+      (await connection.getTokenAccountBalance(userToken2)).value.amount
+    );
+    const drift = got.sub(expected).abs();
+    assert.isTrue(
+      drift.mul(new BN(100)).lt(expected),
+      `bootstrap deposit ${got} vs expected ~${expected}`
+    );
+    assert.equal((await program.account.market.fetch(m2)).itemsDeposited, 1);
+
+    await program.methods
+      .withdrawItem()
+      .accountsPartial({
+        market: m2,
+        itemMint: itemMint2,
+        registration: reg2,
+        itemReserve: items2,
+        user: shorter.publicKey,
+        userItem: userItem2,
+        synthMint: mint2,
+        userToken: userToken2,
+      })
+      .signers([shorter])
+      .rpc();
+    assert.equal((await program.account.market.fetch(m2)).itemsDeposited, 0);
+    assert.equal(
+      (await connection.getTokenAccountBalance(userItem2)).value.amount,
+      "1"
+    );
+  });
+
   it("holds and releases an identity fee escrow PDA", async () => {
     const idHash = Array.from(
       require("crypto").createHash("sha256").update("youtube:testbreaker").digest()
