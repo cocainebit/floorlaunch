@@ -117,3 +117,12 @@
   .fl-card-grid { flex-wrap: wrap; }
   .fl-card-wrap { flex-basis: 46%; }
 }
+
+
+.fl-card-link {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fl-card-link:hover { opacity: 1; }
