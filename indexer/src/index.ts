@@ -97,17 +97,29 @@ const fld = (o: any, ...keys: string[]) => { for (const k of keys) if (o[k] !== 
 const perTokenSol = (solLamports: number, tokenBase: number) =>
   solLamports / LAMPORTS_PER_SOL / (tokenBase / BASE_UNITS_PER_TOKEN);
 
-function handleEvent(rawName: string, data: any, sig: string, ts: number) {
+async function handleEvent(rawName: string, data: any, sig: string, ts: number) {
   const name = rawName.charAt(0).toLowerCase() + rawName.slice(1);
   if (!["curveTraded", "ammTraded", "indexPushed", "fundingAccrued", "shortChanged", "graduated", "breakerTripped", "liquidated"].includes(name)) {
     console.log("unhandled event:", rawName);
   }
   if (name === "curveTraded" || name === "ammTraded") {
     const market = data.market.toBase58();
+    // Price = the market's SPOT after this trade, not the fill's average:
+    // a single buy that walks the whole curve executes at the mid-span
+    // average, but the market now trades at the post-fill spot.
+    let priceSol = perTokenSol(n(fld(data, "solAmount", "sol_amount")), n(fld(data, "tokenAmount", "token_amount")));
+    try {
+      const acc: any = await (program.account as any).market.fetch(new PublicKey(market));
+      const spot =
+        "live" in acc.status
+          ? Number(acc.ammSolReserve) / LAMPORTS_PER_SOL / (Number(acc.ammTokenReserve) / BASE_UNITS_PER_TOKEN)
+          : Number(acc.curveVirtualSol) / LAMPORTS_PER_SOL / (Number(acc.curveVirtualTokens) / BASE_UNITS_PER_TOKEN);
+      if (spot > 0) priceSol = spot;
+    } catch {}
     const t: Trade = {
       ts,
       side: fld(data, "isBuy", "is_buy") ? "buy" : "sell",
-      priceSol: perTokenSol(n(fld(data, "solAmount", "sol_amount")), n(fld(data, "tokenAmount", "token_amount"))),
+      priceSol,
       solAmount: n(fld(data, "solAmount", "sol_amount")) / LAMPORTS_PER_SOL,
       tokenAmount: n(fld(data, "tokenAmount", "token_amount")) / BASE_UNITS_PER_TOKEN,
       phase: name === "curveTraded" ? "curve" : "amm",
@@ -140,11 +152,13 @@ function subscribe() {
     if (logs.err || seenSigs.has(logs.signature)) return;
     seenSigs.add(logs.signature);
     const ts = Math.floor(Date.now() / 1000);
-    try {
-      for (const ev of eventParser.parseLogs(logs.logs)) {
-        handleEvent(ev.name, ev.data, logs.signature, ts);
-      }
-    } catch {}
+    (async () => {
+      try {
+        for (const ev of eventParser.parseLogs(logs.logs)) {
+          await handleEvent(ev.name, ev.data, logs.signature, ts);
+        }
+      } catch {}
+    })();
   }, "confirmed");
   console.log(`subscribed to program logs for ${PROGRAM_ID}`);
 }
