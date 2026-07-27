@@ -54,6 +54,10 @@ pub struct MarketParams {
     pub liq_bonus_bps: u16,
     /// Cap on total CDP debt, token base units.
     pub max_open_interest: u64,
+    /// Preminted allocation backing item swaps, token base units. Each
+    /// deposited item releases TOKENS_PER_NFT from it; each withdrawal
+    /// returns them. Zero disables item swaps for the market.
+    pub item_reserve: u64,
     /// Curve trade fee, bps.
     pub curve_fee_bps: u16,
     /// AMM trade fee, bps.
@@ -120,10 +124,23 @@ pub struct Market {
     pub insurance_lamports: u64,
     pub fee_lamports: u64,
 
+    /// Items currently held by the market's item escrow.
+    pub items_deposited: u32,
+
     pub bump: u8,
     pub vault_bump: u8,
     pub mint_bump: u8,
     pub treasury_bump: u8,
+}
+
+/// Admin-registered item mint eligible for a market's item swaps (a
+/// vaulted-card NFT or collection NFT verified off chain in v1).
+#[account]
+#[derive(InitSpace)]
+pub struct ItemRegistration {
+    pub market: Pubkey,
+    pub item_mint: Pubkey,
+    pub bump: u8,
 }
 
 #[account]

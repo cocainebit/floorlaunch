@@ -37,13 +37,68 @@ export function pdas(market: PublicKey, owner?: PublicKey) {
     [Buffer.from("vault"), market.toBuffer()],
     PROGRAM_ID
   );
+  const [itemReserve] = PublicKey.findProgramAddressSync(
+    [Buffer.from("items"), market.toBuffer()],
+    PROGRAM_ID
+  );
   const short = owner
     ? PublicKey.findProgramAddressSync(
         [Buffer.from("short"), market.toBuffer(), owner.toBuffer()],
         PROGRAM_ID
       )[0]
     : undefined;
-  return { mint, pool, treasury, vault, short };
+  return { mint, pool, treasury, vault, itemReserve, short };
+}
+
+export function itemRegistration(market: PublicKey, itemMint: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("item"), market.toBuffer(), itemMint.toBuffer()],
+    PROGRAM_ID
+  )[0];
+}
+
+export async function depositItem(
+  provider: anchor.AnchorProvider,
+  market: string,
+  itemMint: string
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const im = new PublicKey(itemMint);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.depositItem()
+    .accountsPartial({
+      market: m,
+      itemMint: im,
+      registration: itemRegistration(m, im),
+      itemReserve: p.itemReserve,
+      user: provider.wallet.publicKey,
+      synthMint: p.mint,
+    })
+    .rpc();
+  return { sig };
+}
+
+export async function withdrawItem(
+  provider: anchor.AnchorProvider,
+  market: string,
+  itemMint: string
+): Promise<TxResult> {
+  const m = new PublicKey(market);
+  const im = new PublicKey(itemMint);
+  const p = pdas(m);
+  const sig = await program(provider)
+    .methods.withdrawItem()
+    .accountsPartial({
+      market: m,
+      itemMint: im,
+      registration: itemRegistration(m, im),
+      itemReserve: p.itemReserve,
+      user: provider.wallet.publicKey,
+      synthMint: p.mint,
+    })
+    .rpc();
+  return { sig };
 }
 
 export async function curveBuy(

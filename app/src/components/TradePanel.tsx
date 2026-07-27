@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { RPC_URL } from "../wallet";
-import type { MarketInfo } from "../api";
+import type { MarketInfo, ListingMeta } from "../api";
 import { useFlWallet } from "../wallet";
-import { ammBuy, ammSell, curveBuy, curveSell } from "../tx";
+import { ammBuy, ammSell, curveBuy, curveSell, depositItem, withdrawItem } from "../tx";
 
 const FEE_BPS = 70;
 const SLIPPAGE = 0.02; // 2% guard on the quoted output
@@ -37,11 +37,15 @@ type Status =
   | { kind: "ok"; sig: string }
   | { kind: "error"; msg: string };
 
-export default function TradePanel({ m }: { m: MarketInfo }) {
+export default function TradePanel({ m, listing }: { m: MarketInfo; listing?: ListingMeta }) {
   const wallet = useFlWallet();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [payMode, setPayMode] = useState<"sol" | "collectible">("sol");
   const [nfts, setNfts] = useState<string[]>([]);
+  const registered = useMemo(
+    () => nfts.filter((n) => listing?.itemMints?.includes(n)),
+    [nfts, listing?.itemMints]
+  );
   const [amount, setAmount] = useState("1.0");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const amt = parseFloat(amount) || 0;
@@ -88,6 +92,21 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
     }
   }
 
+  const itemSwapTokens =
+    m.markPerToken > 0 ? (m.indexPerToken * 1e6) / (m.markPerToken * 1e6) * 1e6 : 0;
+
+  async function doDepositItem() {
+    if (!wallet.provider || !registered.length) return;
+    setStatus({ kind: "sending" });
+    try {
+      const r = await depositItem(wallet.provider, m.market, registered[0]);
+      setStatus({ kind: "ok", sig: r.sig });
+    } catch (e: any) {
+      const msg = String(e.message ?? e);
+      setStatus({ kind: "error", msg: msg.match(/Error Message: ([^.]+)/)?.[1] ?? msg.slice(0, 90) });
+    }
+  }
+
   const curveProgress = isCurve(m)
     ? Math.min(100, (m.curveSolRaised / m.graduationTargetSol) * 100)
     : null;
@@ -127,6 +146,56 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
         </button>
       </div>
 
+      {side === "sell" && m.itemsDeposited > 0 && (
+        <div className="pay-modes">
+          <button className={`pay-mode ${payMode === "sol" ? "active" : ""}`} onClick={() => setPayMode("sol")}>
+            Receive SOL
+          </button>
+          <button
+            className={`pay-mode ${payMode === "collectible" ? "active" : ""}`}
+            onClick={() => setPayMode("collectible")}
+          >
+            Receive a copy
+          </button>
+        </div>
+      )}
+      {side === "sell" && payMode === "collectible" && m.itemsDeposited > 0 ? (
+        <div className="collectible-pay">
+          <div className="row">
+            <span>Copies in the pool</span>
+            <span className="mono">{m.itemsDeposited}</span>
+          </div>
+          <div className="row">
+            <span>Tokens required (value-equal)</span>
+            <span className="mono">
+              {itemSwapTokens.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <button
+            className="cta sell"
+            onClick={async () => {
+              if (!wallet.provider || !listing?.itemMints?.length) return;
+              setStatus({ kind: "sending" });
+              try {
+                // withdraw the first mint the escrow actually holds
+                for (const im of listing.itemMints) {
+                  try {
+                    const r = await withdrawItem(wallet.provider, m.market, im);
+                    setStatus({ kind: "ok", sig: r.sig });
+                    return;
+                  } catch {}
+                }
+                throw new Error("no escrowed copy could be withdrawn");
+              } catch (e: any) {
+                setStatus({ kind: "error", msg: String(e.message ?? e).slice(0, 90) });
+              }
+            }}
+            disabled={status.kind === "sending" || !wallet.connected}
+          >
+            {status.kind === "sending" ? "Confirming…" : "Redeem tokens → copy"}
+          </button>
+        </div>
+      ) : null}
       {side === "buy" && (
         <div className="pay-modes">
           <button className={`pay-mode ${payMode === "sol" ? "active" : ""}`} onClick={() => setPayMode("sol")}>
@@ -143,31 +212,43 @@ export default function TradePanel({ m }: { m: MarketInfo }) {
       {side === "buy" && payMode === "collectible" ? (
         <div className="collectible-pay">
           {wallet.connected ? (
-            nfts.length > 0 ? (
+            registered.length > 0 ? (
               <>
                 <div className="row">
-                  <span>On-chain items in wallet</span>
-                  <span className="mono">{nfts.length}</span>
+                  <span>Your copies of this collectible</span>
+                  <span className="mono">{registered.length}</span>
                 </div>
                 <div className="row">
-                  <span>1 item at the live index</span>
-                  <span className="mono">{(m.indexPerToken * 1e6).toFixed(3)} SOL</span>
-                </div>
-                <div className="row">
-                  <span>≈ tokens received</span>
+                  <span>Item value (live index)</span>
                   <span className="mono">
-                    {quoteBuy(m, m.indexPerToken * 1e6).out.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {m.solUsd > 0
+                      ? `$${(m.indexPerToken * 1e6 * m.solUsd).toFixed(0)}`
+                      : `${(m.indexPerToken * 1e6).toFixed(3)} SOL`}
                   </span>
                 </div>
-                <button className="cta buy" disabled title="Marketplace routing ships with the devnet deployment">
-                  Route item → tokens (soon)
+                <div className="row">
+                  <span>Tokens received (value-equal)</span>
+                  <span className="mono">
+                    {itemSwapTokens.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <button
+                  className="cta buy"
+                  onClick={doDepositItem}
+                  disabled={status.kind === "sending" || m.status !== "live"}
+                >
+                  {status.kind === "sending" ? "Confirming…" : "Deposit copy → tokens"}
                 </button>
                 <div className="dim form-note">
-                  Sells your item into the real floor (Magic Eden / Collector Crypt) at the live
-                  price and buys the token with the proceeds, one flow. Requires public-cluster
-                  marketplaces; on localnet this is preview only.
+                  Your copy goes into the market's item pool; you receive tokens worth exactly
+                  the card at current prices. Redeem any time from the Sell side.
                 </div>
               </>
+            ) : nfts.length > 0 ? (
+              <div className="dim form-note">
+                You hold {nfts.length} on-chain item(s), but none are copies of this market's
+                collectible. On devnet, vaulted-card and collection NFTs verify automatically.
+              </div>
             ) : (
               <div className="dim form-note">
                 No on-chain collectibles detected in this wallet. Holders of the real item (a

@@ -46,6 +46,7 @@ describe("floorlaunch", () => {
     maintenanceCrBps: 12000,
     liqBonusBps: 500,
     maxOpenInterest: new BN("500000000000000"),
+    itemReserve: new BN("100000000000000"),
     curveFeeBps: 100,
     ammFeeBps: 100,
     graduationTargetSol: new BN(10).mul(new BN(SOL)),
@@ -78,6 +79,10 @@ describe("floorlaunch", () => {
   );
   const [vaultPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), marketPda.toBuffer()],
+    program.programId
+  );
+  const [itemReservePda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("items"), marketPda.toBuffer()],
     program.programId
   );
   const shortPda = (owner: PublicKey) =>
@@ -128,6 +133,7 @@ describe("floorlaunch", () => {
         market: marketPda,
         synthMint: mintPda,
         poolToken: poolPda,
+        itemReserve: itemReservePda,
         solVault: vaultPda,
       })
       .rpc();
@@ -140,7 +146,7 @@ describe("floorlaunch", () => {
     assert.isNull(mint.mintAuthority);
     assert.equal(
       mint.supply.toString(),
-      params.curveVirtualTokens.add(params.maxOpenInterest).toString()
+      params.curveVirtualTokens.add(params.maxOpenInterest).add(params.itemReserve).toString()
     );
     const pool = await connection.getTokenAccountBalance(poolPda);
     assert.equal(pool.value.amount, params.curveVirtualTokens.toString());
@@ -231,6 +237,7 @@ describe("floorlaunch", () => {
       m.curveTokensSold
         .add(m.ammTokenReserve)
         .add(params.maxOpenInterest)
+        .add(params.itemReserve)
         .toString()
     );
   });
@@ -736,6 +743,119 @@ describe("floorlaunch", () => {
       (treasuryAfterRepay - treasuryAfterOpen).toString(),
       debt.toString()
     );
+  });
+
+  it("swaps items in and out at card value", async () => {
+    // A demo vaulted-card copy: 0-decimals mint, supply 1, owned by shorter.
+    const itemMint = await createMint(connection, payer.payer, payer.publicKey, null, 0);
+    const shorterItemAta = await createAssociatedTokenAccount(
+      connection, payer.payer, itemMint, shorter.publicKey
+    );
+    await mintTo(connection, payer.payer, itemMint, shorterItemAta, payer.payer, 1);
+
+    const [reg] = PublicKey.findProgramAddressSync(
+      [Buffer.from("item"), marketPda.toBuffer(), itemMint.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .registerItem()
+      .accountsPartial({
+        global: globalPda,
+        admin: payer.publicKey,
+        market: marketPda,
+        itemMint,
+        registration: reg,
+      })
+      .rpc();
+
+    const [itemReserve] = PublicKey.findProgramAddressSync(
+      [Buffer.from("items"), marketPda.toBuffer()],
+      program.programId
+    );
+    const m0 = await market();
+    const expectedTokens = new BN(m0.indexTwap.toString())
+      .mul(new BN("1000000000000"))
+      .div(new BN(m0.markEma.toString()));
+
+    const balBefore = new BN(
+      (await connection.getTokenAccountBalance(shorterAta)).value.amount
+    );
+    await program.methods
+      .depositItem()
+      .accountsPartial({
+        market: marketPda,
+        itemMint,
+        registration: reg,
+        itemReserve,
+        user: shorter.publicKey,
+        userItem: shorterItemAta,
+        synthMint: mintPda,
+        userToken: shorterAta,
+      })
+      .signers([shorter])
+      .rpc();
+    const balAfter = new BN(
+      (await connection.getTokenAccountBalance(shorterAta)).value.amount
+    );
+    const received = balAfter.sub(balBefore);
+    // received tokens = index/mark of one card, within EMA-drift tolerance
+    const diff = received.sub(expectedTokens).abs();
+    assert.isTrue(
+      diff.mul(new BN(100)).lt(expectedTokens),
+      `received ${received} vs expected ~${expectedTokens}`
+    );
+    assert.equal((await market()).itemsDeposited, 1);
+    assert.equal(
+      (await connection.getTokenAccountBalance(shorterItemAta)).value.amount,
+      "0"
+    );
+
+    // withdraw the copy back: pay tokens worth the card
+    await program.methods
+      .withdrawItem()
+      .accountsPartial({
+        market: marketPda,
+        itemMint,
+        registration: reg,
+        itemReserve,
+        user: shorter.publicKey,
+        userItem: shorterItemAta,
+        synthMint: mintPda,
+        userToken: shorterAta,
+      })
+      .signers([shorter])
+      .rpc();
+    assert.equal((await market()).itemsDeposited, 0);
+    assert.equal(
+      (await connection.getTokenAccountBalance(shorterItemAta)).value.amount,
+      "1"
+    );
+
+    // unregistered mints are rejected
+    const rogue = await createMint(connection, payer.payer, payer.publicKey, null, 0);
+    const rogueAta = await createAssociatedTokenAccount(
+      connection, payer.payer, rogue, shorter.publicKey
+    );
+    await mintTo(connection, payer.payer, rogue, rogueAta, payer.payer, 1);
+    try {
+      await program.methods
+        .depositItem()
+        .accountsPartial({
+          market: marketPda,
+          itemMint: rogue,
+          registration: reg,
+          itemReserve,
+          user: shorter.publicKey,
+          userItem: rogueAta,
+          synthMint: mintPda,
+          userToken: shorterAta,
+        })
+        .signers([shorter])
+        .rpc();
+      assert.fail("should have thrown");
+    } catch (e: any) {
+      assert.include(e.toString(), "ConstraintSeeds");
+    }
   });
 
   it("holds and releases an identity fee escrow PDA", async () => {

@@ -111,6 +111,10 @@ export async function devLaunch(
     [Buffer.from("market"), collection.toBuffer()],
     pid
   );
+  const [itemReservePda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("items"), marketPda.toBuffer()],
+    pid
+  );
 
   {
     // Mirror the Meteora DBC valuation span (open at 25% of the migration
@@ -132,6 +136,7 @@ export async function devLaunch(
       maintenanceCrBps: 12000,
       liqBonusBps: 500,
       maxOpenInterest: new BN("100000000000000"),
+      itemReserve: new BN("100000000000000"),
       curveFeeBps: 70,
       ammFeeBps: 70,
       graduationTargetSol: new BN(10).mul(new BN(LAMPORTS)),
@@ -145,6 +150,7 @@ export async function devLaunch(
         global: globalPda,
         admin: admin.publicKey,
         market: marketPda,
+        itemReserve: itemReservePda,
       })
       .rpc();
     await program.methods
@@ -158,12 +164,46 @@ export async function devLaunch(
       .rpc();
   }
 
+  // Localnet demo copies of the underlying: three item NFTs minted to the
+  // launcher's wallet and registered for the market, standing in for
+  // vaulted-card / collection NFTs until devnet collection verification.
+  const itemMints: string[] = [];
+  try {
+    const spl = await import("@solana/spl-token");
+    const web3 = await import("@solana/web3.js");
+    const adminKp = web3.Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(ADMIN_KEY, "utf8"))));
+    const owner = new PublicKey(body.meta.launchedBy);
+    for (let i = 0; i < 3; i++) {
+      const mint = await spl.createMint(connection, adminKp, adminKp.publicKey, null, 0);
+      const ata = await spl.getOrCreateAssociatedTokenAccount(connection, adminKp, mint, owner);
+      await spl.mintTo(connection, adminKp, mint, ata.address, adminKp, 1);
+      const [reg] = PublicKey.findProgramAddressSync(
+        [Buffer.from("item"), marketPda.toBuffer(), mint.toBuffer()],
+        pid
+      );
+      await program.methods
+        .registerItem()
+        .accountsPartial({
+          global: globalPda,
+          admin: admin.publicKey,
+          market: marketPda,
+          itemMint: mint,
+          registration: reg,
+        })
+        .rpc();
+      itemMints.push(mint.toBase58());
+    }
+  } catch (e) {
+    console.log("demo item setup failed:", String((e as any).message).slice(0, 80));
+  }
+
   const listings = loadListings();
   listings[marketPda.toBase58()] = {
     ...body.meta,
     identifier: u.identifier,
+    itemMints,
     launchedAt: Math.floor(Date.now() / 1000),
-  };
+  } as any;
   writeFileSync(LISTINGS_PATH, JSON.stringify(listings, null, 2));
   return { market: marketPda.toBase58(), indexLamports };
 }

@@ -80,6 +80,15 @@ pub mod floorlaunch {
                 params.max_open_interest,
             )?;
         }
+        if params.item_reserve > 0 {
+            mint_synth(
+                &ctx.accounts.market,
+                &ctx.accounts.synth_mint,
+                &ctx.accounts.item_reserve,
+                &ctx.accounts.token_program,
+                params.item_reserve,
+            )?;
+        }
         let market = &ctx.accounts.market;
         let seeds: &[&[u8]] = &[b"market", market.collection.as_ref(), &[market.bump]];
         set_authority(
@@ -765,6 +774,108 @@ pub mod floorlaunch {
         Ok(())
     }
 
+    /// Register an item mint (a specific vaulted-card NFT or collection
+    /// NFT) as depositable into a market's item pool. Admin-gated in v1;
+    /// on-chain collection verification replaces this at devnet.
+    pub fn register_item(ctx: Context<RegisterItem>) -> Result<()> {
+        let r = &mut ctx.accounts.registration;
+        r.market = ctx.accounts.market.key();
+        r.item_mint = ctx.accounts.item_mint.key();
+        r.bump = ctx.bumps.registration;
+        Ok(())
+    }
+
+    /// Deposit a registered item and receive tokens worth the item: the
+    /// card's live index value divided by the token's mark price. Tokens
+    /// come from the preminted item reserve, so supply stays fixed.
+    pub fn deposit_item(ctx: Context<ItemSwap>) -> Result<()> {
+        let m = &mut ctx.accounts.market;
+        require!(m.status == MarketStatus::Live, Err::NotLive);
+        require!(!m.frozen, Err::Frozen);
+        require_fresh_index(m)?;
+        update_mark(m)?;
+        require!(m.mark_ema > 0, Err::NoMark);
+
+        // Tokens equal in value to one item at current prices.
+        let tokens_out = ((m.index_twap as u128 * BASE_UNITS_PER_NFT)
+            / m.mark_ema as u128) as u64;
+        require!(
+            ctx.accounts.item_reserve.amount >= tokens_out,
+            Err::ItemReserveDepleted
+        );
+        m.items_deposited += 1;
+
+        // Item into the market escrow.
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                token::Transfer {
+                    from: ctx.accounts.user_item.to_account_info(),
+                    to: ctx.accounts.escrow_item.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            1,
+        )?;
+        transfer_pool_tokens_out(
+            &ctx.accounts.market,
+            &ctx.accounts.item_reserve,
+            &ctx.accounts.user_token,
+            &ctx.accounts.token_program,
+            tokens_out,
+        )?;
+        emit!(ItemSwapped {
+            market: ctx.accounts.market.key(),
+            user: ctx.accounts.user.key(),
+            item_mint: ctx.accounts.item_mint.key(),
+            deposited: true,
+            tokens: tokens_out,
+        });
+        Ok(())
+    }
+
+    /// Return tokens worth one item and take a copy out of the escrow.
+    pub fn withdraw_item(ctx: Context<ItemSwap>) -> Result<()> {
+        let m = &mut ctx.accounts.market;
+        require!(m.status == MarketStatus::Live, Err::NotLive);
+        require!(!m.frozen, Err::Frozen);
+        require_fresh_index(m)?;
+        update_mark(m)?;
+        require!(m.mark_ema > 0, Err::NoMark);
+        require!(ctx.accounts.escrow_item.amount >= 1, Err::ItemNotInEscrow);
+
+        let tokens_in = ((m.index_twap as u128 * BASE_UNITS_PER_NFT)
+            / m.mark_ema as u128) as u64;
+        m.items_deposited = m.items_deposited.saturating_sub(1);
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                token::Transfer {
+                    from: ctx.accounts.user_token.to_account_info(),
+                    to: ctx.accounts.item_reserve.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            tokens_in,
+        )?;
+        transfer_pool_tokens_out(
+            &ctx.accounts.market,
+            &ctx.accounts.escrow_item,
+            &ctx.accounts.user_item,
+            &ctx.accounts.token_program,
+            1,
+        )?;
+        emit!(ItemSwapped {
+            market: ctx.accounts.market.key(),
+            user: ctx.accounts.user.key(),
+            item_mint: ctx.accounts.item_mint.key(),
+            deposited: false,
+            tokens: tokens_in,
+        });
+        Ok(())
+    }
+
     pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
         let m = &mut ctx.accounts.market;
         require!(amount > 0 && amount <= m.fee_lamports, Err::InsufficientVaultFunds);
@@ -968,6 +1079,15 @@ pub struct FundingAccrued {
 }
 
 #[event]
+pub struct ItemSwapped {
+    pub market: Pubkey,
+    pub user: Pubkey,
+    pub item_mint: Pubkey,
+    pub deposited: bool,
+    pub tokens: u64,
+}
+
+#[event]
 pub struct EscrowReleased {
     pub id_hash: [u8; 32],
     pub recipient: Pubkey,
@@ -1052,6 +1172,15 @@ pub struct CreateMarket<'info> {
         token::authority = market
     )]
     pub treasury: Account<'info, TokenAccount>,
+    #[account(
+        init,
+        payer = admin,
+        seeds = [b"items", market.key().as_ref()],
+        bump,
+        token::mint = synth_mint,
+        token::authority = market
+    )]
+    pub item_reserve: Account<'info, TokenAccount>,
     #[account(mut, seeds = [b"vault", market.key().as_ref()], bump)]
     pub sol_vault: SystemAccount<'info>,
     pub token_program: Program<'info, Token>,
@@ -1302,6 +1431,73 @@ pub struct ReleaseEscrow<'info> {
     /// CHECK: verified wallet chosen after off-chain identity proof.
     #[account(mut)]
     pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RegisterItem<'info> {
+    #[account(seeds = [b"global"], bump = global.bump, has_one = admin)]
+    pub global: Account<'info, Global>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    pub market: Account<'info, Market>,
+    pub item_mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + ItemRegistration::INIT_SPACE,
+        seeds = [b"item", market.key().as_ref(), item_mint.key().as_ref()],
+        bump
+    )]
+    pub registration: Account<'info, ItemRegistration>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ItemSwap<'info> {
+    #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    pub item_mint: Box<Account<'info, Mint>>,
+    #[account(
+        seeds = [b"item", market.key().as_ref(), item_mint.key().as_ref()],
+        bump = registration.bump,
+        constraint = registration.item_mint == item_mint.key() @ Err::ItemNotRegistered
+    )]
+    pub registration: Box<Account<'info, ItemRegistration>>,
+    #[account(
+        mut,
+        seeds = [b"items", market.key().as_ref()],
+        bump
+    )]
+    pub item_reserve: Box<Account<'info, TokenAccount>>,
+    /// The market's escrow for this specific item mint.
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = item_mint,
+        associated_token::authority = market
+    )]
+    pub escrow_item: Box<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = item_mint,
+        associated_token::authority = user
+    )]
+    pub user_item: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = market.synth_mint)]
+    pub synth_mint: Box<Account<'info, Mint>>,
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = synth_mint,
+        associated_token::authority = user
+    )]
+    pub user_token: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 

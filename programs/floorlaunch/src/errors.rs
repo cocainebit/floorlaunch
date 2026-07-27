@@ -52,4 +52,10 @@ pub enum FloorlaunchError {
     NoMark,
     #[msg("treasury reserve cannot cover this mint")]
     TreasuryDepleted,
+    #[msg("item reserve cannot cover this deposit")]
+    ItemReserveDepleted,
+    #[msg("item is not registered for this market")]
+    ItemNotRegistered,
+    #[msg("item escrow does not hold this item")]
+    ItemNotInEscrow,
 }

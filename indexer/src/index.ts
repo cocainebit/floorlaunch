@@ -293,6 +293,7 @@ app.get("/markets", async (_req, res) => {
         curveVirtualTokens: Number(a.account.curveVirtualTokens) / BASE_UNITS_PER_TOKEN,
         graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
         maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
+        itemsDeposited: a.account.itemsDeposited,
       }))
     );
   } catch (e: any) {

@@ -22,6 +22,7 @@ export interface MarketInfo {
   graduationTargetSol: number;
   fundingIndex: string;
   maxOpenInterest: number;
+  itemsDeposited: number;
 }
 
 export interface Candle {
@@ -70,6 +71,7 @@ export interface ListingMeta {
   links: Record<string, string | undefined>;
   feeReceiver: { kind: string; value: string };
   identifier: string;
+  itemMints?: string[];
 }
 
 export const fetchMarkets = () => get<MarketInfo[]>("/markets");

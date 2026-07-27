@@ -18,7 +18,7 @@ const params = {
   indexWindowSecs: 30, minPushIntervalSecs: 0, breakerBps: 3000, maxIndexAgeSecs: 3600,
   markWindowSecs: 60, fundingKBps: 10000, maxFundingBpsPerDay: 10000, minCrankIntervalSecs: 1,
   initialCrBps: 15000, maintenanceCrBps: 12000, liqBonusBps: 500,
-  maxOpenInterest: new BN("100000000000000"), curveFeeBps: 70, ammFeeBps: 70,
+  maxOpenInterest: new BN("100000000000000"), itemReserve: new BN("100000000000000"), curveFeeBps: 70, ammFeeBps: 70,
   graduationTargetSol: new BN(10).mul(new BN(1e9)), insuranceShareBps: 1000,
   curveVirtualSol: new BN(100).mul(new BN(1e9)), curveVirtualTokens: new BN("1000000000000"),
 };

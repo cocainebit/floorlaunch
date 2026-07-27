@@ -149,7 +149,7 @@ export default function App() {
             <Panels m={market} trades={trades} funding={funding} />
           </div>
           <div className="col-side">
-            <TradePanel m={market} />
+            <TradePanel m={market} listing={listings[market.market]} />
             <HedgePanel m={market} />
           </div>
         </main>
