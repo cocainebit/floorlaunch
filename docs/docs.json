@@ -23,7 +23,12 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["index", "how-it-works", "asset-classes", "glossary"]
+        "pages": [
+          "index",
+          "how-it-works",
+          "asset-classes",
+          "glossary"
+        ]
       },
       {
         "group": "Core Concepts",
@@ -71,15 +76,39 @@
       },
       {
         "group": "Security",
-        "pages": ["security/risks", "security/attack-vectors"]
+        "pages": [
+          "security/risks",
+          "security/attack-vectors"
+        ]
       },
       {
         "group": "Project",
-        "pages": ["roadmap", "faq"]
+        "pages": [
+          "roadmap",
+          "faq"
+        ]
       }
     ]
   },
   "footer": {
     "socials": {}
+  },
+  "fonts": {
+    "heading": {
+      "family": "Poppins",
+      "weight": 600
+    },
+    "body": {
+      "family": "Inter"
+    }
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "background": {
+    "color": {
+      "dark": "#0B0F0E",
+      "light": "#FAFAF8"
+    }
   }
 }

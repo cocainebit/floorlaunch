@@ -126,3 +126,19 @@
   text-underline-offset: 2px;
 }
 .fl-card-link:hover { opacity: 1; }
+
+/* ---- long.xyz-style typography & polish ---- */
+@import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600&display=swap");
+
+code, pre, pre * , kbd, samp {
+  font-family: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.015em;
+}
+
+/* tighten tables toward the app's density */
+table {
+  font-size: 0.86rem;
+}
