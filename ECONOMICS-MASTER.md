@@ -7,7 +7,10 @@ program (`programs/floorlaunch/src/lib.rs`); worked numbers use the launch
 convention and the live Frogana market as the example.
 
 Diagram sources (mermaid) are embedded per section so figures can be generated
-straight from this file and iterated. All notation is defined once in section 0.
+straight from this file and iterated. Final rendered figures live in
+`docs/images/economics/` with their matplotlib sources in `docs/figures-src/`
+(regenerate with `python3 fig_charts.py && python3 fig_flows.py`). All notation
+is defined once in section 0.
 
 ---
 

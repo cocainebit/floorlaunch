@@ -29,6 +29,10 @@ Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [stalen
 
 ## 3. Launch phase: the bonding curve
 
+<Frame caption="The life of a market: launch, curve, automatic migration, live AMM.">
+  <img src="/images/economics/03-lifecycle.png" alt="The life of a market: launch, curve, automatic migration, live AMM." noZoom />
+</Frame>
+
 The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads, and every launch is priced identically: 1B token supply, a **25 SOL market cap at open**, and migration once the curve has raised **100 SOL**, so the AMM pool starts with 100 SOL of real liquidity inside it (about a 625 SOL market cap at the close). The collectible's price never touches the curve; the oracle index is launch-scaled so premium and funding stay meaningful. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
 
 <Note>

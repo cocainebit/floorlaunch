@@ -72,3 +72,7 @@ Two consequences of the external design:
 - **Treasury reserve for CDP supply.** Both venues run the same fixed-supply path: `open_short` draws tokens from a program-held treasury (`["treasury", market]`) and `repay_burn`/`liquidate` return them. The reserve balance is a physical open-interest ceiling (`TreasuryDepleted`), enforced by token balances rather than a parameter; internal markets premint it, external markets fund it at listing.
 
 Remaining future work on this path is UX-level: launching markets through a floorlaunch-branded DBC config key end to end. The on-chain venue system, treasury model, and mark path shipped with v1 and were exercised in the 20-test suite.
+
+<Frame caption="Price impact of a buy against the 100 SOL opening pool; impact halves as the pool deepens.">
+  <img src="/images/economics/04-amm-impact.png" alt="Price impact of a buy against the 100 SOL opening pool; impact halves as the pool deepens." noZoom />
+</Frame>
