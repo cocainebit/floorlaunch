@@ -142,3 +142,63 @@ h1, h2, h3 {
 table {
   font-size: 0.86rem;
 }
+
+/* ---- full docs polish pass ---- */
+
+/* landing hero */
+.fl-hero {
+  text-align: center;
+  padding: 1.4rem 0 0.4rem;
+}
+.fl-hero-title {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 2.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 0.6rem;
+}
+.fl-hero-title em {
+  font-style: normal;
+  color: #10B981;
+}
+.fl-hero-sub {
+  max-width: 560px;
+  margin: 0 auto 1.4rem;
+  font-size: 0.98rem;
+  opacity: 0.78;
+  line-height: 1.55;
+}
+
+/* card hover lift */
+.fl-card-wrap .fl-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.fl-card-wrap:hover .fl-card {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(16, 185, 129, 0.14);
+}
+
+/* softer borders + rounded corners on tables and code */
+table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+th {
+  font-family: Poppins, Inter, sans-serif;
+  font-weight: 500;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* callouts closer to app density */
+[class*="callout"] {
+  border-radius: 12px;
+}
+
+/* sidebar group labels in Poppins */
+#sidebar h5, aside h5, [data-sidebar] h5 {
+  font-family: Poppins, Inter, sans-serif;
+  letter-spacing: 0.01em;
+}

@@ -91,7 +91,9 @@
     ]
   },
   "footer": {
-    "socials": {}
+    "socials": {
+      "github": "https://github.com/cocainebit/floorlaunch"
+    }
   },
   "fonts": {
     "heading": {
@@ -109,6 +111,24 @@
     "color": {
       "dark": "#0B0F0E",
       "light": "#FAFAF8"
+    }
+  },
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/cocainebit/floorlaunch"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Launch a token",
+      "href": "https://github.com/cocainebit/floorlaunch#readme"
     }
   }
 }
