@@ -1,3 +1,4 @@
+import { fmtUsd, fmtSol } from "../fmt";
 import type { MarketInfo, ListingMeta } from "../api";
 import { COLLECTION_META, FALLBACK_META } from "../config";
 
@@ -76,8 +77,8 @@ export default function UnderlyingStrip({
         <div className="u-stat">
           <div className="u-label">Price</div>
           <div className="u-value">
-            {m.solUsd > 0 ? `$${(markUnit * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${markUnit.toFixed(4)} SOL`}
-            {m.solUsd > 0 && <span className="u-sub-val">{markUnit.toFixed(4)} SOL</span>}
+            {m.solUsd > 0 ? fmtUsd((markUnit / 1e6) * m.solUsd) : fmtSol(markUnit / 1e6)}
+            {m.solUsd > 0 && <span className="u-sub-val">{fmtSol(markUnit / 1e6)}</span>}
           </div>
         </div>
         <div className="u-stat">

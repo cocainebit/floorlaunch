@@ -22,7 +22,9 @@ const TFS = [
 
 // Chart shows price per unit (1M tokens) so candles and the
 // oracle index share one readable scale.
-const PER_UNIT = 1_000_000;
+import { fmtUsd, fmtSmallPrice } from "../fmt";
+
+const PER_UNIT = 1; // per-token pricing
 
 interface Props {
   market: string;
@@ -84,7 +86,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
       downColor: COLORS.down,
       borderDownColor: COLORS.down,
       wickDownColor: COLORS.down,
-      priceFormat: { type: "price", precision: 3, minMove: 0.001 },
+      priceFormat: { type: "custom", minMove: 1e-12, formatter: (v: number) => fmtSmallPrice(v) },
     });
     const index = chart.addSeries(LineSeries, {
       color: COLORS.index,
@@ -108,8 +110,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
       priceFormat: {
         type: "custom",
         minMove: 0.01,
-        formatter: (v: number) =>
-          v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v.toFixed(2)}`,
+        formatter: (v: number) => fmtUsd(v),
       },
     });
     const vol = chart.addSeries(HistogramSeries, {
@@ -287,7 +288,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
           {lastPrice != null
             ? lastPrice >= 1000
               ? `$${(lastPrice / 1000).toFixed(1)}K`
-              : `$${lastPrice.toFixed(2)}`
+              : fmtUsd(lastPrice)
             : ""}
         </div>
         <div className="chart-legend">
@@ -298,7 +299,7 @@ export default function Chart({ market, solUsd, lastTrade, lastIndexTick }: Prop
             <span className="legend-line" /> Floor index
           </span>
           <span className="legend-unit">
-            {mode === "line" ? "USD per 1M tokens" : "SOL per 1M tokens"} · charting by TradingView
+            {mode === "line" ? "USD per token" : "SOL per token"} · charting by TradingView
           </span>
         </div>
       </div>

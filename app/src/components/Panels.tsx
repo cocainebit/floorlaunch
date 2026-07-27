@@ -1,3 +1,4 @@
+import { fmtUsd, fmtSol } from "../fmt";
 import { useEffect, useState } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { pdas } from "../tx";
@@ -19,7 +20,7 @@ function TradesTable({ trades, solUsd }: { trades: Trade[]; solUsd: number }) {
           <tr>
             <th>Time</th>
             <th>Side</th>
-            <th className="num">Price ($/unit)</th>
+            <th className="num">Price</th>
             <th className="num">Tokens</th>
             <th className="num">SOL</th>
             <th>Trader</th>
@@ -34,8 +35,8 @@ function TradesTable({ trades, solUsd }: { trades: Trade[]; solUsd: number }) {
               </td>
               <td className="num mono">
                 {solUsd > 0
-                  ? `$${(t.priceSol * PER_UNIT * solUsd).toFixed(2)}`
-                  : (t.priceSol * PER_UNIT).toFixed(3)}
+                  ? fmtUsd(t.priceSol * solUsd)
+                  : fmtSol(t.priceSol)}
               </td>
               <td className="num mono">
                 {t.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
