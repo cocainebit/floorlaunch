@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "name": "floorlaunch",
   "description": "Launchpad for funding-pegged synthetic tokens tracking collectible markets: graded trading cards and NFT collection floors. No custody, no vault.",
-  "theme": "mint",
+  "theme": "almond",
   "icons": {
     "library": "lucide"
   },
