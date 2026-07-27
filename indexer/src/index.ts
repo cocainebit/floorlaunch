@@ -342,6 +342,99 @@ app.get("/markets", async (_req, res) => {
   }
 });
 
+// Aggregator: every catalog collectible with all its price sources, the
+// spread between them, and the markets launched against it. Live Magic
+// Eden floors are fetched with a 5 minute cache.
+const meCache = new Map<string, { at: number; floorSol: number | null }>();
+async function meFloor(symbol: string): Promise<number | null> {
+  const hit = meCache.get(symbol);
+  if (hit && Date.now() - hit.at < 300_000) return hit.floorSol;
+  try {
+    const r = await fetch(`https://api-mainnet.magiceden.dev/v2/collections/${symbol}/stats`);
+    const b: any = await r.json();
+    const v = b?.floorPrice > 0 ? b.floorPrice / LAMPORTS_PER_SOL : null;
+    meCache.set(symbol, { at: Date.now(), floorSol: v });
+    return v;
+  } catch {
+    meCache.set(symbol, { at: Date.now(), floorSol: null });
+    return null;
+  }
+}
+
+app.get("/aggregator", async (_req, res) => {
+  try {
+    const catalog: any[] = JSON.parse(
+      readFileSync(`${process.env.HOME}/floorlaunch/app/src/underlyings.json`, "utf8")
+    );
+    const listings = loadListings();
+    const accounts = await (program.account as any).market.all();
+    const solUsd = await getSolUsd();
+    const byId = new Map<string, any[]>();
+    for (const [market, meta] of Object.entries(listings)) {
+      const a = accounts.find((x: any) => x.publicKey.toBase58() === market);
+      if (!a) continue;
+      const scaled = Number(a.account.indexTwap) / LAMPORTS_PER_SOL;
+      const atLaunch = (meta as any).indexAtLaunchLamports;
+      const arr = byId.get((meta as any).identifier) ?? [];
+      arr.push({
+        market,
+        ticker: (meta as any).ticker,
+        status: Object.keys(a.account.status)[0],
+        priceSol:
+          Number(a.account.markEma) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
+        premiumPct:
+          Number(a.account.markEma) > 0 && Number(a.account.indexTwap) > 0
+            ? (Number(a.account.markEma) / Number(a.account.indexTwap) - 1) * 100
+            : null,
+        onchainIndexSol:
+          atLaunch > 0 ? (scaled / 0.625) * (atLaunch / LAMPORTS_PER_SOL) : null,
+      });
+      byId.set((meta as any).identifier, arr);
+    }
+    const rows = await Promise.all(
+      catalog.map(async (u: any) => {
+        const snapshotSol =
+          u.kind === "nft"
+            ? u.snapshot?.floorSol ?? null
+            : (u.usdPrice ?? u.snapshot?.ccFloorUsd) / solUsd;
+        const liveSol =
+          u.kind === "nft" && u.identifier?.startsWith("magiceden:")
+            ? await meFloor(u.identifier.split(":")[1])
+            : null;
+        const markets = byId.get(u.identifier) ?? [];
+        const chainSol = markets.find((m) => m.onchainIndexSol)?.onchainIndexSol ?? null;
+        const sources = [snapshotSol, liveSol, chainSol].filter(
+          (v): v is number => v != null && v > 0
+        );
+        const spreadPct =
+          sources.length >= 2
+            ? ((Math.max(...sources) - Math.min(...sources)) /
+                ((Math.max(...sources) + Math.min(...sources)) / 2)) *
+              100
+            : null;
+        return {
+          identifier: u.identifier,
+          name: u.name,
+          category: u.category,
+          kind: u.kind,
+          image: u.image ?? null,
+          snapshotSol,
+          liveSol,
+          chainSol,
+          spreadPct,
+          listed: u.snapshot?.listed ?? null,
+          weeklyVolSol: u.snapshot?.weeklyVolSol ?? null,
+          solUsd,
+          markets,
+        };
+      })
+    );
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
+
 app.get("/candles/:market", (req, res) => {
   const tf = Number(req.query.tf ?? 60);
   const limit = Number(req.query.limit ?? 500);

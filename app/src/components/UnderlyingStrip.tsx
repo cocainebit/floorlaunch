@@ -8,10 +8,12 @@ export default function UnderlyingStrip({
   m,
   listing,
   lastTradePrice,
+  onOpenIndex,
 }: {
   m: MarketInfo;
   listing?: ListingMeta;
   lastTradePrice?: number | null;
+  onOpenIndex?: () => void;
 }) {
   const base = COLLECTION_META[m.collection] ?? FALLBACK_META;
   const meta = listing
@@ -67,8 +69,12 @@ export default function UnderlyingStrip({
       </div>
 
       <div className="u-stats">
-        <div className="u-stat">
-          <div className="u-label">Floor index</div>
+        <div
+          className={`u-stat ${onOpenIndex ? "u-stat-link" : ""}`}
+          onClick={onOpenIndex}
+          title="All price sources for this collectible"
+        >
+          <div className="u-label">Floor index ↗</div>
           <div className="u-value index-color">
             {m.solUsd > 0 ? `$${(cardIndex * m.solUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${cardIndex.toFixed(3)} SOL`}
             {m.solUsd > 0 && <span className="u-sub-val">{cardIndex.toFixed(3)} SOL</span>}

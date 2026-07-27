@@ -6,6 +6,7 @@ import UnderlyingStrip from "./components/UnderlyingStrip";
 import Panels from "./components/Panels";
 import LaunchFlow from "./components/LaunchFlow";
 import Explorer from "./components/Explorer";
+import Aggregator from "./components/Aggregator";
 import {
   fetchMarkets,
   fetchTrades,
@@ -22,7 +23,8 @@ import { useFlWallet } from "./wallet";
 
 export default function App() {
   const wallet = useFlWallet();
-  const [view, setView] = useState<"markets" | "launch" | "explorer">("markets");
+  const [view, setView] = useState<"markets" | "launch" | "explorer" | "index">("markets");
+  const [aggFocus, setAggFocus] = useState<string | null>(null);
   const [listings, setListings] = useState<Record<string, ListingMeta>>({});
   const [markets, setMarkets] = useState<MarketInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -99,6 +101,15 @@ export default function App() {
           >
             Explorer
           </span>
+          <span
+            className={`nav-item ${view === "index" ? "active" : ""}`}
+            onClick={() => {
+              setAggFocus(null);
+              setView("index");
+            }}
+          >
+            Index
+          </span>
           <a className="nav-item" href="http://localhost:3333" target="_blank" rel="noreferrer">
             Docs
           </a>
@@ -114,7 +125,15 @@ export default function App() {
         </div>
       </header>
 
-      {view === "explorer" ? (
+      {view === "index" ? (
+        <Aggregator
+          focus={aggFocus}
+          onOpenMarket={(mkt) => {
+            setSelected(mkt);
+            setView("markets");
+          }}
+        />
+      ) : view === "explorer" ? (
         <Explorer
           markets={markets}
           listings={listings}
@@ -139,6 +158,10 @@ export default function App() {
               m={market}
               listing={listings[market.market]}
               lastTradePrice={trades[0]?.priceSol ?? null}
+              onOpenIndex={() => {
+                setAggFocus(listings[market.market]?.identifier ?? null);
+                setView("index");
+              }}
             />
             <Chart
               market={market.market}
