@@ -431,6 +431,54 @@ async function refreshOracles() {
 setInterval(refreshOracles, 300_000);
 setTimeout(refreshOracles, 15_000);
 
+// Fee-split keeper: trading fees (0.70%) accrue per market on chain;
+// sweep any balance above 0.02 SOL as two withdraw_fees calls, half to
+// the protocol treasury and half to the wallet that launched the market.
+import { FEE_TREASURY } from "./launch.js";
+async function sweepFees() {
+  try {
+    const { Keypair } = await import("@solana/web3.js");
+    const anchorMod = await import("@coral-xyz/anchor");
+    const { readFileSync } = await import("node:fs");
+    const { homedir } = await import("node:os");
+    const BN = (await import("bn.js")).default;
+    const admin = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(readFileSync(process.env.ADMIN_KEY_PATH ?? `${homedir()}/.config/solana/id.json`, "utf8")))
+    );
+    const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(admin), {
+      commitment: "confirmed",
+    });
+    const prog = new anchorMod.Program(structuredClone(idl), provider);
+    const [globalPda] = PublicKey.findProgramAddressSync([Buffer.from("global")], new PublicKey(PROGRAM_ID));
+    const listings = loadListings();
+    for (const [market, meta] of Object.entries(listings)) {
+      try {
+        const marketPk = new PublicKey(market);
+        const m: any = await (prog.account as any).market.fetch(marketPk);
+        const fees = Number(m.feeLamports);
+        if (fees < 20_000_000) continue;
+        const half = Math.floor(fees / 2);
+        const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault"), marketPk.toBuffer()], new PublicKey(PROGRAM_ID));
+        const creator = new PublicKey((meta as any).launchedBy);
+        for (const [recipient, amount] of [
+          [new PublicKey(FEE_TREASURY), half],
+          [creator, fees - half],
+        ] as const) {
+          await prog.methods
+            .withdrawFees(new BN(amount))
+            .accountsPartial({ global: globalPda, admin: admin.publicKey, market: marketPk, solVault: vault, recipient })
+            .rpc();
+        }
+        console.log(`fees swept for ${market}: ${(fees / 1e9).toFixed(4)} SOL split treasury/creator`);
+      } catch (e: any) {
+        console.log(`fee sweep ${market}: ${String(e.message ?? e).slice(0, 80)}`);
+      }
+    }
+  } catch {}
+}
+setInterval(sweepFees, 300_000);
+setTimeout(sweepFees, 30_000);
+
 // Auto-migration: when a curve reaches its graduation target the market
 // migrates to the AMM automatically (graduate is permissionless; the
 // indexer pays the fee). Swept every 10s and nudged by trade events.

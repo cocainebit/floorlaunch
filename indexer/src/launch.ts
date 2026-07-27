@@ -21,7 +21,9 @@ const LAMPORTS = 1e9;
 const BASE_UNITS_PER_NFT = 1_000_000_000_000n;
 const CATALOG_PATH = `${homedir()}/floorlaunch/app/src/underlyings.json`;
 const LISTINGS_PATH = new URL("../data/listings.json", import.meta.url).pathname;
-const ADMIN_KEY = `${homedir()}/.config/solana/id.json`;
+const ADMIN_KEY = process.env.ADMIN_KEY_PATH ?? `${homedir()}/.config/solana/id.json`;
+export const FEE_TREASURY = process.env.FEE_TREASURY ?? "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX";
+export const LAUNCH_FEE_LAMPORTS = Number(process.env.LAUNCH_FEE_LAMPORTS ?? 100_000_000);
 const ORACLE_KEY = `${homedir()}/floorlaunch/relayer/keys/oracle-sim.json`;
 
 export interface ListingMeta {
@@ -94,6 +96,33 @@ export async function devLaunch(
   const admin = kp(ADMIN_KEY);
   const oracle = kp(ORACLE_KEY);
   const connection = new Connection(rpcUrl, "confirmed");
+
+  // Launch fee: 0.1 SOL to the protocol treasury, paid by the launching
+  // wallet in a separate tx the UI sends first. Localnet skips it.
+  if (!isLocal) {
+    const sig = (body as any).feePaymentSig;
+    if (!sig) throw new Error("launch fee payment required (0.1 SOL)");
+    const prior = loadListings();
+    if (Object.values(prior).some((l: any) => l.feePaymentSig === sig)) {
+      throw new Error("fee payment already used");
+    }
+    const ftx = await connection.getTransaction(sig, {
+      maxSupportedTransactionVersion: 0,
+      commitment: "confirmed",
+    });
+    if (!ftx || ftx.meta?.err) throw new Error("fee payment tx not found");
+    if (ftx.blockTime && Date.now() / 1000 - ftx.blockTime > 900) {
+      throw new Error("fee payment too old");
+    }
+    const keys = ftx.transaction.message.getAccountKeys().staticAccountKeys;
+    const ti = keys.findIndex((k) => k.toBase58() === FEE_TREASURY);
+    if (ti < 0) throw new Error("fee payment does not pay the treasury");
+    const delta = ftx.meta!.postBalances[ti] - ftx.meta!.preBalances[ti];
+    if (delta < LAUNCH_FEE_LAMPORTS) throw new Error("fee payment below 0.1 SOL");
+    if (keys[0].toBase58() !== body.meta.launchedBy) {
+      throw new Error("fee paid by a different wallet than the launcher");
+    }
+  }
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(admin), {
     commitment: "confirmed",
   });
@@ -219,6 +248,7 @@ export async function devLaunch(
   listings[marketPda.toBase58()] = {
     ...body.meta,
     identifier: u.identifier,
+    feePaymentSig: (body as any).feePaymentSig ?? null,
     itemMints,
     indexAtLaunchLamports: indexLamports,
     unitsPerItemMicro,

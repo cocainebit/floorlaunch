@@ -215,7 +215,13 @@ export default function TradePanel({ m, listing }: { m: MarketInfo; listing?: Li
       )}
       {side === "buy" && payMode === "collectible" ? (
         <div className="collectible-pay">
-          {wallet.connected ? (
+          {m.status !== "live" ? (
+            <div className="hint">
+              Item swaps open once the curve fills and the market migrates
+              to the AMM: deposits are priced off the pool's mark, which
+              does not exist yet.
+            </div>
+          ) : wallet.connected ? (
             registered.length > 0 ? (
               <>
                 <div className="row">

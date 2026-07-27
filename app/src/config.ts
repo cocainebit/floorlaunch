@@ -1,3 +1,7 @@
+/** Protocol fee treasury (launch fees + protocol half of trading fees). */
+export const FEE_TREASURY = "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX";
+export const LAUNCH_FEE_SOL = 0.1;
+
 export const INDEXER_HTTP = "http://127.0.0.1:8787";
 export const INDEXER_WS = "ws://127.0.0.1:8787/ws";
 

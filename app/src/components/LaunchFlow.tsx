@@ -9,7 +9,9 @@
 import { useMemo, useState } from "react";
 import catalog from "../underlyings.json";
 import { useFlWallet } from "../wallet";
-import { INDEXER_HTTP } from "../config";
+import { INDEXER_HTTP, FEE_TREASURY, LAUNCH_FEE_SOL } from "../config";
+import { IS_LOCALNET } from "../wallet";
+import { SystemProgram, Transaction, PublicKey as Pk } from "@solana/web3.js";
 import type { ListingMeta } from "../api";
 
 interface Underlying {
@@ -158,11 +160,26 @@ export default function LaunchFlow({
         if (!er.ok) throw new Error(eb.error ?? "escrow creation failed");
         return { kind: feeMode, value: feeValue, escrow: eb.escrowPubkey };
       })();
+      // Launch fee: 0.1 SOL to the protocol treasury, verified server-side
+      // before the market is created.
+      let feePaymentSig: string | undefined;
+      if (!IS_LOCALNET) {
+        if (!wallet.provider) throw new Error("wallet not ready");
+        const feeTx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: new Pk(FEE_TREASURY),
+            lamports: Math.round(LAUNCH_FEE_SOL * 1e9),
+          })
+        );
+        feePaymentSig = await wallet.provider.sendAndConfirm(feeTx);
+      }
       const res = await fetch(`${INDEXER_HTTP}/dev/launch`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           identifier: sel.identifier,
+          feePaymentSig,
           meta: {
             ticker: `fl${ticker.toUpperCase()}`,
             name,
@@ -465,6 +482,11 @@ export default function LaunchFlow({
             <div className="lz-review-label">Ticker availability</div>
             <div className={`lz-avail ${tickerState.ok ? "ok" : "bad"}`}>
               {tickerState.ok ? `$fl${ticker.toUpperCase()} is available.` : tickerState.msg}
+            </div>
+
+            <div className="lz-review-label">Launch fee</div>
+            <div className="lz-avail ok">
+              {IS_LOCALNET ? "None on localnet." : `${LAUNCH_FEE_SOL} SOL, paid on deploy.`}
             </div>
 
             <div className="lz-spacer" />
