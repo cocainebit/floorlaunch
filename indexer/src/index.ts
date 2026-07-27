@@ -51,6 +51,11 @@ interface MarketStore {
   funding: { ts: number; rateBpsPerDay: number; mark: number; index: number }[];
 }
 
+// Public devnet RPC rate-limits hard; never let a stray 429 kill the
+// process, and cache the heavy /markets scan briefly.
+process.on("uncaughtException", (e) => console.error("uncaught:", String(e).slice(0, 200)));
+process.on("unhandledRejection", (e) => console.error("unhandled:", String(e).slice(0, 200)));
+
 const stores = new Map<string, MarketStore>();
 const seenSigs = new Set<string>();
 
@@ -275,13 +280,21 @@ app.post("/dev/launch", async (req, res) => {
   }
 });
 
+let marketsCache: { at: number; body: any } | null = null;
 app.get("/markets", async (_req, res) => {
   try {
+    if (marketsCache && Date.now() - marketsCache.at < 4_000) {
+      res.json(marketsCache.body);
+      return;
+    }
     const accounts = await (program.account as any).market.all();
     const solUsd = await getSolUsd();
     const listings = loadListings();
-    res.json(
-      accounts.map((a: any) => {
+    const body = accounts
+      // Only listed markets: an on-chain market without listing metadata
+      // (e.g. a crashed launch) would render as an unknown ghost.
+      .filter((a: any) => listings[a.publicKey.toBase58()])
+      .map((a: any) => {
         // The on-chain index is launch-scaled (0.625 SOL per unit at
         // launch); recover the collectible's real price from the listing.
         const meta: any = listings[a.publicKey.toBase58()];
@@ -321,8 +334,9 @@ app.get("/markets", async (_req, res) => {
         maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
         itemsDeposited: a.account.itemsDeposited,
       };
-      })
-    );
+      });
+    marketsCache = { at: Date.now(), body };
+    res.json(body);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -375,11 +389,12 @@ async function refreshOracles() {
     });
     const prog = new anchorMod.Program(structuredClone(idl), provider);
     // Localnet self-funding: the oracle pays its own push fees.
-    if (RPC.includes("127.0.0.1") || RPC.includes("localhost")) {
+    if (RPC.includes("127.0.0.1") || RPC.includes("localhost") || RPC.includes("devnet")) {
       const bal = await connection.getBalance(oracle.publicKey);
       if (bal < 1e8) {
         try {
-          const sig = await connection.requestAirdrop(oracle.publicKey, 10e9);
+          const amount = RPC.includes("devnet") ? 2e9 : 10e9;
+          const sig = await connection.requestAirdrop(oracle.publicKey, amount);
           await connection.confirmTransaction(sig);
         } catch {}
       }

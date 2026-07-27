@@ -72,8 +72,9 @@ export async function devLaunch(
   idl: any,
   body: { collectionId?: string; identifier?: string; meta: Omit<ListingMeta, "launchedAt" | "identifier"> }
 ): Promise<{ market: string; indexLamports: number }> {
-  if (!rpcUrl.includes("127.0.0.1") && !rpcUrl.includes("localhost")) {
-    throw new Error("dev launch is localnet-only");
+  const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
+  if (!isLocal && !rpcUrl.includes("devnet")) {
+    throw new Error("dev launch is localnet/devnet-only");
   }
   const catalog: any[] = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
   const u = body.identifier
@@ -179,16 +180,18 @@ export async function devLaunch(
       .rpc();
   }
 
-  // Localnet demo copies of the underlying: three item NFTs minted to the
+  // Demo copies of the underlying: three item NFTs minted to the
   // launcher's wallet and registered for the market, standing in for
-  // vaulted-card / collection NFTs until devnet collection verification.
+  // vaulted-card / collection NFTs until collection verification.
   const itemMints: string[] = [];
+  const pace = () => new Promise((r) => setTimeout(r, rpcUrl.includes("devnet") ? 1_500 : 0));
   try {
     const spl = await import("@solana/spl-token");
     const web3 = await import("@solana/web3.js");
     const adminKp = web3.Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(ADMIN_KEY, "utf8"))));
     const owner = new PublicKey(body.meta.launchedBy);
     for (let i = 0; i < 3; i++) {
+      await pace();
       const mint = await spl.createMint(connection, adminKp, adminKp.publicKey, null, 0);
       const ata = await spl.getOrCreateAssociatedTokenAccount(connection, adminKp, mint, owner);
       await spl.mintTo(connection, adminKp, mint, ata.address, adminKp, 1);

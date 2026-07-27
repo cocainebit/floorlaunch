@@ -3,7 +3,7 @@ import BN from "bn.js";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-const conn = new Connection("http://127.0.0.1:8899", "confirmed");
+const conn = new Connection(process.env.RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
 const admin = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(`${homedir()}/.config/solana/id.json`, "utf8"))));
 const keyPath = new URL("../keys/oracle-sim.json", import.meta.url).pathname;
 mkdirSync(new URL("../keys", import.meta.url).pathname, { recursive: true });

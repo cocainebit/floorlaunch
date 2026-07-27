@@ -34,7 +34,9 @@ import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-export const RPC_URL = "http://127.0.0.1:8899";
+export const RPC_URL =
+  (import.meta as any).env?.VITE_RPC_URL ?? "https://api.devnet.solana.com";
+export const IS_LOCALNET = RPC_URL.includes("127.0.0.1") || RPC_URL.includes("localhost");
 const DEV_KEY_STORAGE = "fl-dev-signer";
 
 const isDevMode = () =>
@@ -81,7 +83,7 @@ function DevBridge({ children }: { children: ReactNode }) {
       try {
         const bal = await connection.getBalance(kp.publicKey);
         if (bal < 5e9) {
-          const sig = await connection.requestAirdrop(kp.publicKey, 100e9);
+          const sig = await connection.requestAirdrop(kp.publicKey, IS_LOCALNET ? 100e9 : 5e9);
           await connection.confirmTransaction(sig);
         }
       } catch {}
