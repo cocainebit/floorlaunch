@@ -415,7 +415,7 @@ Args: none.
 | `user_token` | init_if_needed, ATA(user, synth_mint) |
 | `token_program`, `associated_token_program`, `system_program` | |
 
-Guards: Live, not frozen, index fresh (`NoIndex` / `IndexStale`), `mark_ema > 0` (`NoMark`), `item_reserve.amount >= tokens_out` (`ItemReserveDepleted`). Increments `items_deposited`. Emits `ItemSwapped { deposited: true }`.
+Guards: not frozen, index fresh (`NoIndex` / `IndexStale`), `mark_ema > 0` (`NoMark`), `item_reserve.amount >= tokens_out` (`ItemReserveDepleted`). Works in **both phases**: during Bootstrap the mark EMA is seeded at the curve's opening spot and stepped by every curve trade. Increments `items_deposited`. Emits `ItemSwapped { deposited: true }`.
 
 ### withdraw_item
 
@@ -423,7 +423,7 @@ The mirror image: returns tokens worth one item (same formula, evaluated at with
 
 Args: none. Accounts: same as `deposit_item`.
 
-Guards: Live, not frozen, index fresh (`NoIndex` / `IndexStale`), `mark_ema > 0` (`NoMark`), `escrow_item.amount >= 1` (`ItemNotInEscrow`); the user must hold `tokens_in` in their ATA (SPL transfer fails otherwise). Decrements `items_deposited`. Emits `ItemSwapped { deposited: false }`.
+Guards: not frozen (both phases), index fresh (`NoIndex` / `IndexStale`), `mark_ema > 0` (`NoMark`), `escrow_item.amount >= 1` (`ItemNotInEscrow`); the user must hold `tokens_in` in their ATA (SPL transfer fails otherwise). Decrements `items_deposited`. Emits `ItemSwapped { deposited: false }`.
 
 ## Keeper
 
