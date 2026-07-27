@@ -7,3 +7,6 @@ relayer/keys/
 indexer/data/
 *.log
 .DS_Store
+
+# local secrets
+*.env.local
