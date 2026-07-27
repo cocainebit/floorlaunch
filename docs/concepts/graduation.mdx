@@ -1,9 +1,9 @@
 ---
 title: "Graduation"
-description: "The permissionless transition from bonding curve to live market: seeding the AMM, funding the insurance pool, and starting the funding clock"
+description: "The permissionless transition from bonding curve to live market: seeding the AMM with the raise and starting the funding clock"
 ---
 
-**Graduation** is the moment a market stops being a launchpad token and becomes a live synthetic. It converts the SOL raised on the [Launch Curve](/concepts/launch-curve) into standing AMM liquidity plus an insurance fund, and switches on the machinery that tethers the token to the [Price Index](/concepts/price-index).
+**Graduation** is the moment a market stops being a launchpad token and becomes a live synthetic. It converts the SOL raised on the [Launch Curve](/concepts/launch-curve) into standing AMM liquidity, and switches on the machinery that tethers the token to the [Price Index](/concepts/price-index).
 
 ## Preconditions
 
@@ -28,6 +28,8 @@ amm_sol   = curve_sol_raised - insurance
 - The **insurance fund** backstops liquidation shortfalls; see [Insurance Fund](/concepts/insurance-fund).
 - The **AMM SOL reserve** becomes the real, protocol-owned liquidity the token trades against from now on.
 
+Under the launch convention `insurance_share_bps = 0`: the **entire raise seeds the pool**, so migration means the AMM starts with at least 100 SOL of real liquidity inside it (the 100 SOL target plus whatever the final buy overshot; the end-to-end run migrated at 104 SOL raised, all of it into the pool). The split machinery remains for markets listed with a nonzero share.
+
 Curve fees collected during Bootstrap are already accounted separately in `fee_lamports` and are not part of the split.
 
 ## Pairing the AMM at the closing price
@@ -38,7 +40,7 @@ The AMM's token side comes out of the unsold curve allocation, sized so the pool
 amm_tokens = amm_sol * curve_virtual_tokens / curve_virtual_sol
 ```
 
-Since `curve_virtual_sol / curve_virtual_tokens` is the price where the curve ended, the pool's opening spot equals that price, and graduation itself causes no price gap. Under the launch convention (curve opens at a quarter of the index and spans 4x over the raise; see [Launch curve](/concepts/launch-curve)), the closing price is the index itself, so the AMM opens trading at the collectible's live price. The seed stays in the market's pool token account, a program-controlled account no person can sign for.
+Since `curve_virtual_sol / curve_virtual_tokens` is the price where the curve ended, the pool's opening spot equals that price, and graduation itself causes no price gap. Under the launch convention (25 SOL virtual against the 1B supply, 100 SOL target; see [Launch curve](/concepts/launch-curve)) the closing price is 0.625 SOL per unit, and the oracle index is launch-scaled to define one unit as worth exactly that at launch, so the AMM opens at zero premium to the index. A clean 100 SOL raise pairs the pool as 100 SOL against 160M tokens; the seed stays in the market's pool token account, a program-controlled account no person can sign for.
 
 **The unsold excess burns.** The pool account still holds every curve-allocation token that was never sold; graduation keeps exactly `amm_tokens` and burns the rest (a burn needs only the market's authority over its own token account, not the revoked mint authority). Supply after graduation is exactly tokens sold on the curve + the AMM seed + the hedging reserve, and it can never grow again.
 
@@ -53,7 +55,7 @@ Graduation initializes the live-market state in one transaction:
 | Field | Set to |
 | --- | --- |
 | `status` | `Live` |
-| `insurance_lamports` | the insurance slice |
+| `insurance_lamports` | the insurance slice (zero under the launch convention) |
 | `amm_sol_reserve`, `amm_token_reserve` | the paired reserves |
 | `mark_ema` | the AMM's opening spot price |
 | `mark_last_ts`, `funding_last_ts` | now |
@@ -69,4 +71,4 @@ The `Graduated { market, amm_sol, amm_tokens, insurance }` event records the spl
 
 ## Design intent
 
-The graduation gate is what keeps the two-phase promise honest. Before it, the token is explicitly a launch asset: pure curve price, no tether, no leverage anywhere in the system. After it, every mechanism that makes the synth track its underlying is live simultaneously, funded by the raise itself. There is no intermediate state where the token claims to track the index but lacks the liquidity or insurance to defend that claim.
+The graduation gate is what keeps the two-phase promise honest. Before it, the token is explicitly a launch asset: pure curve price, no tether, no leverage anywhere in the system. After it, every mechanism that makes the synth track its underlying is live simultaneously, funded by the raise itself. There is no intermediate state where the token claims to track the index but lacks the liquidity to defend that claim.

@@ -47,10 +47,11 @@ Embedded in both `Global` (defaults) and each `Market` (active values). Updatabl
 | `liq_bonus_bps` | `u16` | Liquidator bonus as bps of repaid debt value |
 | `max_open_interest` | `u64` | Cap on total CDP debt, in token base units |
 | `item_reserve` | `u64` | Preminted allocation backing [item swaps](/concepts/synth-token#item-swaps), in token base units; 0 disables item swaps for the market |
+| `units_per_item_micro` | `u64` | How many launch-scale units (1M tokens each) one physical item was worth at launch, in millionths; required nonzero when `item_reserve > 0` |
 | `curve_fee_bps` | `u16` | Trade fee during the launch curve |
 | `amm_fee_bps` | `u16` | Trade fee on the internal AMM |
 | `graduation_target_sol` | `u64` | Real SOL raised (lamports) that permits [graduation](/concepts/graduation) |
-| `insurance_share_bps` | `u16` | Share of the raise seeding the [insurance fund](/concepts/insurance-fund) |
+| `insurance_share_bps` | `u16` | Share of the raise seeding the [insurance fund](/concepts/insurance-fund) (zero under the launch convention) |
 | `curve_virtual_sol` | `u64` | Initial virtual SOL reserve of the curve (lamports); immutable after creation |
 | `curve_virtual_tokens` | `u64` | Initial virtual token reserve of the curve (base units); immutable after creation |
 

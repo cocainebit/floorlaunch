@@ -44,21 +44,22 @@ On the internal venue it plays a double role: `create_market` premints exactly t
 
 | Field | Type | Meaning | Illustrative |
 | --- | --- | --- | --- |
-| `item_reserve` | u64 | Preminted allocation backing [item swaps](/concepts/synth-token#item-swaps), base units; 0 disables the facility | 100 units (1e14) |
+| `item_reserve` | u64 | Preminted allocation backing [item swaps](/concepts/synth-token#item-swaps), base units; 0 disables the facility | sized for 25 items at launch scale |
+| `units_per_item_micro` | u64 | How many units (1M tokens each) one physical item was worth at launch, in millionths: `card_index_at_launch / 0.625 SOL`. Carries the item's real size into item swaps, since the launch-scaled index prices a unit, not a card. Must be `> 0` whenever `item_reserve > 0` (`ZeroAmount` at `create_market` otherwise) | `1_000_000` = one unit per item |
 
-Like the hedge reserve, this is a physical premint made before the mint authority is revoked, so it can never be raised after creation. Each `deposit_item` pays `index_twap * 1e12 / mark_ema` base units out of it and each `withdraw_item` pays the same formula back in, so the reserve floats around its initial size as copies flow in and out. Size it to the number of vaulted copies you realistically expect deposited at once, with headroom for the token trading below parity (a cheap mark pays out more tokens per copy).
+Like the hedge reserve, `item_reserve` is a physical premint made before the mint authority is revoked, so it can never be raised after creation. Each `deposit_item` pays `index_twap * 1e12 * units_per_item_micro / mark_ema / 1e6` base units out of it and each `withdraw_item` pays the same formula back in, so the reserve floats around its initial size as copies flow in and out. The launch executor sizes it for 25 deposited items at launch scale (`units_per_item_micro * 1e6 * 25` base units). Size it to the number of vaulted copies you realistically expect deposited at once, with headroom for the token trading below parity (a cheap mark pays out more tokens per copy).
 
 ## Launch curve and graduation
 
 | Field | Type | Meaning | Illustrative |
 | --- | --- | --- | --- |
 | `curve_fee_bps` | u16 | Trade fee on curve buys and sells | 100 (1%) |
-| `graduation_target_sol` | u64 | Real SOL raised that permits `graduate` | 500 SOL |
-| `insurance_share_bps` | u16 | Share of the raise seeding the [insurance fund](/concepts/insurance-fund) | 1000 (10%) |
-| `curve_virtual_sol` | u64 | Initial virtual SOL reserve, lamports; immutable after creation | equal to the graduation target |
-| `curve_virtual_tokens` | u64 | Initial virtual token reserve, base units; immutable after creation | set so the curve opens at a quarter of the index |
+| `graduation_target_sol` | u64 | Real SOL raised that permits `graduate` | 100 SOL (launch convention) |
+| `insurance_share_bps` | u16 | Share of the raise seeding the [insurance fund](/concepts/insurance-fund) | 0 (launch convention: the full raise seeds the pool) |
+| `curve_virtual_sol` | u64 | Initial virtual SOL reserve, lamports; immutable after creation | 25 SOL (launch convention) |
+| `curve_virtual_tokens` | u64 | Initial virtual token reserve, base units; immutable after creation | the full 1B token supply (launch convention) |
 
-The two virtual reserves define the curve's starting price: `curve_virtual_sol / curve_virtual_tokens` lamports per base unit. The launchpad convention sets `curve_virtual_sol` equal to `graduation_target_sol`, which makes the curve span exactly 4x over the raise, and picks `curve_virtual_tokens` so the curve opens at one quarter of the index and closes at the index at graduation (see [Launch Curve](/concepts/launch-curve)).
+The two virtual reserves define the curve's starting price: `curve_virtual_sol / curve_virtual_tokens` lamports per base unit. The launch convention is identical for every market, regardless of the underlying: 25 SOL virtual against the full 1B supply opens the token at a 25 SOL market cap, and the 100 SOL graduation target closes the curve at 0.625 SOL per unit, about a 625 SOL market cap, with the entire raise seeding the AMM (see [Launch Curve](/concepts/launch-curve)).
 
 ## AMM
 

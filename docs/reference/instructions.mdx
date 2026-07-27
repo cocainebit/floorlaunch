@@ -68,7 +68,7 @@ Lists a new underlying on the **internal venue**. Admin-gated in v1 (listing pol
 | `sol_vault` | mut, `["vault", market]` |
 | `token_program`, `system_program` | |
 
-Guards: `curve_virtual_sol > 0` and `curve_virtual_tokens > 0`, else `ZeroAmount`. The market starts in `Bootstrap` with `venue = Internal` and `funding_index = FUNDING_ONE`. The admin also seeds the SOL vault with an untracked [rent-exemption buffer](/reference/pdas#the-sol-vault) so later outflows can never strand it below the rent-exempt minimum. Events: none.
+Guards: `curve_virtual_sol > 0`, `curve_virtual_tokens > 0`, and `units_per_item_micro > 0` whenever `item_reserve > 0`, else `ZeroAmount`. The market starts in `Bootstrap` with `venue = Internal` and `funding_index = FUNDING_ONE`. The admin also seeds the SOL vault with an untracked [rent-exemption buffer](/reference/pdas#the-sol-vault) so later outflows can never strand it below the rent-exempt minimum. Events: none.
 
 ### create_external_market
 
@@ -239,7 +239,7 @@ Guards: Bootstrap, not frozen, `tokens_in > 0` (`ZeroAmount`), `tokens_in <= cur
 
 ### graduate
 
-Permissionless transition from Bootstrap to Live once the raise target is met. Splits the raise into the [insurance fund](/concepts/insurance-fund) and the [AMM](/concepts/amm) reserves, keeps a price-matched AMM seed from the unsold curve allocation in the pool account, **burns the unsold excess** (supply only shrinks after creation), and initializes the mark EMA and funding clock. See [Graduation](/concepts/graduation).
+Permissionless transition from Bootstrap to Live once the raise target is met. Splits the raise into the [insurance fund](/concepts/insurance-fund) and the [AMM](/concepts/amm) reserves (under the launch convention `insurance_share_bps = 0`, so the full raise seeds the AMM), keeps a price-matched AMM seed from the unsold curve allocation in the pool account, **burns the unsold excess** (supply only shrinks after creation), and initializes the mark EMA and funding clock. See [Graduation](/concepts/graduation).
 
 Args: none.
 
@@ -377,7 +377,7 @@ Guards: `debt_scaled == 0` (`DebtOutstanding`), `collateral == 0` (`Insufficient
 
 ## Item swaps
 
-Value-based exchange between the synth and registered on-chain copies of the underlying (vaulted-card NFTs, collection NFTs). Both directions price one item at `index_twap * BASE_UNITS_PER_NFT / mark_ema` base units: tokens equal in value to one item at current prices, using the smoothed mark rather than spot so a sandwich cannot move the rate inside one block. See [Item swaps](/concepts/synth-token#item-swaps).
+Value-based exchange between the synth and registered on-chain copies of the underlying (vaulted-card NFTs, collection NFTs). Both directions price one item at `index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6` base units: tokens equal in value to one item at current prices, with `units_per_item_micro` restoring the item's real size against the launch-scaled index, and the smoothed mark rather than spot so a sandwich cannot move the rate inside one block. See [Item swaps](/concepts/synth-token#item-swaps).
 
 ### register_item
 
@@ -398,7 +398,7 @@ Guards: admin only. Events: none.
 
 ### deposit_item
 
-Deposits one registered item into the market's escrow and receives tokens worth the item from the preminted item reserve: `tokens_out = index_twap * BASE_UNITS_PER_NFT / mark_ema`. Supply stays fixed; the tokens were preminted at creation.
+Deposits one registered item into the market's escrow and receives tokens worth the item from the preminted item reserve: `tokens_out = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6`. Supply stays fixed; the tokens were preminted at creation.
 
 Args: none.
 

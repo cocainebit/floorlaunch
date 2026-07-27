@@ -27,18 +27,17 @@ The hedging facility is a preminted supply allocation, like a locked reserve in 
 The scale constant for every market:
 
 ```text
-1 underlying unit (one floor NFT, one graded card) = 1,000,000 tokens
-                                                   = 1e12 base units
+1 unit = 1,000,000 tokens = 1e12 base units
 ```
 
-Since the [Price Index](/concepts/price-index) is quoted in lamports per whole unit:
+The unit is **launch-scaled**: at launch, one unit is defined as worth 0.625 SOL, the curve's migration price, and the [Price Index](/concepts/price-index) moves it proportionally with the collectible from there. Since the index is quoted in lamports per whole unit:
 
 ```text
 index_per_base_unit = index_lamports / 1e12
 value(base_units)   = base_units * index_lamports / 1e12
 ```
 
-Worked example: a 100 SOL floor makes the index `1e11` lamports. One token (1e6 base units) is then worth `1e11 * 1e6 / 1e12 = 1e5` lamports, or 0.0001 SOL. The million-to-one split keeps the per-token price in memecoin territory while the unit stays a whole NFT or card.
+Worked example: a market launches against a card trading at 6.25 SOL. The index opens at `625_000_000` lamports per unit, and one card equals ten units at launch (`units_per_item_micro = 10_000_000`; see [item swaps](#item-swaps)). If the card doubles, the pushed index doubles to 1.25 SOL per unit and one token (1e6 base units) is worth `1.25e9 * 1e6 / 1e12` lamports, or 0.00000125 SOL. The million-to-one split keeps the per-token price in memecoin territory; the launch scaling keeps every market's unit on the same footing regardless of how expensive the collectible is.
 
 ## Where circulating supply comes from
 
@@ -84,19 +83,21 @@ A market's liquidity is not limited to SOL: **the collectible's own supply is li
 Both directions are **value-based**, never a fixed per-item token count:
 
 ```text
-tokens per item = index_twap * BASE_UNITS_PER_NFT / mark_ema
+tokens per item = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6
 ```
 
-The numerator is what one copy is worth (the oracle index); the denominator is what one token trades for (the mark EMA). You always exchange one item for tokens of equal market value at that moment:
+The index is launch-scaled (it prices a *unit*, not a card), so `units_per_item_micro` restores the item's real size: how many units one physical item was worth at launch, in millionths (`card_index_at_launch / 0.625 SOL`). The numerator is then what one copy is worth at current prices and the denominator is what one token trades for (the mark EMA). You always exchange one item for tokens of equal market value at that moment:
 
-- Token trading at its index parity: one copy swaps for about 1,000,000 tokens.
-- Token trading at half the index (mark EMA at 50% of parity): one copy swaps for about 2,000,000 tokens, because each token is worth half as much. The value received is identical.
+- Token trading at its index parity: one copy swaps for about `units_per_item` units of tokens.
+- Token trading at half the index (mark EMA at 50% of parity): one copy swaps for about twice that, because each token is worth half as much. The value received is identical.
+
+In the end-to-end run, a Frogana copy worth 0.44 SOL at launch was deposited and paid out about 651,000 tokens, worth 0.436 SOL at the mark: equal value at execution, with the small gap coming from EMA smoothing of the index and the mark.
 
 Mechanics:
 
 - Only **registered** copies are accepted. [`register_item`](/reference/instructions#register_item) creates an `ItemRegistration` PDA per (market, item mint); registration is admin-gated in v1 while the relayer verifies vault provenance off chain.
 - Deposited copies sit in a market-authority escrow (one ATA per item mint); `Market.items_deposited` counts them and `ItemSwapped` fires on every swap. See [Events](/reference/events#itemswapped).
-- Deposit tokens come from the **item reserve** (`["items", market]`), a third preminted allocation sized by `params.item_reserve` at creation, so supply stays fixed. `ItemReserveDepleted` bounds the facility exactly like the treasury bounds shorts; withdrawals refill the reserve. A market created with `item_reserve = 0` has no item facility.
+- Deposit tokens come from the **item reserve** (`["items", market]`), a third preminted allocation sized by `params.item_reserve` at creation, so supply stays fixed. `ItemReserveDepleted` bounds the facility exactly like the treasury bounds shorts; withdrawals refill the reserve. A market created with `item_reserve = 0` has no item facility, and creating one with `item_reserve > 0` requires `units_per_item_micro > 0` (`ZeroAmount` otherwise). The launch executor sizes the reserve for 25 deposited items at launch scale.
 - Both directions require a Live, unfrozen market with a fresh index and a nonzero mark.
 
 **Why the mark EMA and not spot.** Pricing the swap off the AMM spot would make it sandwichable: buy the pool up, deposit a copy into the inflated price, dump. The mark EMA moves by at most `min(dt, window)/window` per block, so a single-transaction price spike barely moves the swap rate. The same smoothing that protects [funding](/concepts/funding) protects item swaps.

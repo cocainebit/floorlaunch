@@ -40,7 +40,7 @@ On every other launchpad, a token is backed by nothing but attention. On floorla
     A signed feed reads the collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector Crypt, Magic Eden), filters manipulation, and writes the result on chain.
   </Step>
   <Step title="The token launches on a curve">
-    Anyone can buy from the first block; the launch works like any memecoin curve, but it opens at a quarter of the collectible's live price and auto-migrates to the AMM exactly at that price once the raise target is met.
+    Anyone can buy from the first block; the launch works like any memecoin curve: every token opens at a 25 SOL market cap and auto-migrates to the AMM once the curve has raised 100 SOL, so the pool starts with 100 SOL of liquidity inside it.
   </Step>
   <Step title="The token tracks the collectible">
     Funding and hedger arbitrage pull the token's price toward the collectible's price, up and down. Card doubles, your exposure doubles.

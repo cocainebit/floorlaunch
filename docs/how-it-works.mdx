@@ -29,7 +29,7 @@ Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [stalen
 
 ## 3. Launch phase: the bonding curve
 
-The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads. The curve opens at **one quarter of the collectible's index** and is sized to close exactly **at the index** when the raise target is met, so early buyers get a discount to the real-world price and graduation hands the AMM a token already trading at parity. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
+The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads, and every launch is priced identically: 1B token supply, a **25 SOL market cap at open**, and migration once the curve has raised **100 SOL**, so the AMM pool starts with 100 SOL of real liquidity inside it (about a 625 SOL market cap at the close). The collectible's price never touches the curve; the oracle index is launch-scaled so premium and funding stay meaningful. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
 
 <Note>
 External-venue markets skip stages 3 and 4 entirely: a token that launched on Meteora DBC attaches via `create_external_market`, starts directly in the live phase, and runs its CDP off a treasury reserve with an oracle-pushed mark. See [Venues](/concepts/amm#venues).
@@ -41,7 +41,7 @@ When the curve has raised its SOL target, the market **auto-migrates**: `graduat
 
 <Steps>
   <Step title="Insurance fund seeded">
-    A configured share of the raised SOL becomes the market's [insurance fund](/concepts/insurance-fund).
+    A configured share of the raised SOL can seed the market's [insurance fund](/concepts/insurance-fund); the launch convention sets it to zero so the full 100 SOL raise lands in the pool.
   </Step>
   <Step title="AMM seeded">
     The rest becomes the real SOL reserve of an internal constant-product [AMM](/concepts/amm), paired against unsold curve-allocation synth at the curve's closing price; the remaining unsold excess burns, so supply only shrinks after launch.

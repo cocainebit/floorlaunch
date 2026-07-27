@@ -108,7 +108,9 @@ program creates.
 Each trade pays a per-market fee (`curve_fee_bps` on the curve,
 `amm_fee_bps` on the AMM) that accrues inside the market vault and is
 withdrawable by the admin via `withdraw_fees`. At graduation,
-`insurance_share_bps` of the curve raise seeds the market's insurance fund.
+`insurance_share_bps` of the curve raise can seed the market's insurance
+fund; the launch convention sets it to zero so the full raise lands in
+the pool.
 There are no fees on opening or closing shorts beyond normal trading.
 </Accordion>
 

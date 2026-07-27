@@ -3,13 +3,19 @@ title: "Price Index"
 description: "How the on-chain floor price index is fed, smoothed, and consumed by every risk check in the protocol"
 ---
 
-Every market carries an on-chain **price index**: the protocol's view of what one whole underlying unit (one floor NFT, or one graded card) is worth, denominated in **lamports per unit**. The index is the reference that everything else keys off: collateral checks, liquidations, and the funding rate that tethers the synth price.
+Every market carries an on-chain **price index**: the protocol's view of what one whole unit of the synth (1,000,000 tokens) is worth, denominated in **lamports per unit**. The index is **launch-scaled**: at launch, one unit is defined as worth 0.625 SOL, the [launch curve](/concepts/launch-curve)'s migration price, and every push moves it proportionally with the collectible from there:
+
+```text
+pushed = collectible_price_now / collectible_price_at_launch * 0.625 SOL
+```
+
+The index therefore carries the collectible's move since launch rather than its absolute price, which keeps premium, [funding](/concepts/funding), the [breaker](/concepts/circuit-breaker), and CDP math on the same footing for every market, and seeds the AMM at zero premium at [graduation](/concepts/graduation). The index is the reference that everything else keys off: collateral checks, liquidations, and the funding rate that tethers the synth price.
 
 ## Push oracle
 
 The index is fed by a push oracle. The market's price feed, a signed relayer service that reads the collectible's real prices from marketplaces and filters manipulation (see [Oracle Architecture](/oracle/architecture)), submits it with the `push_index` instruction, signed by the **oracle authority** key stored in the global config. No other signer can push.
 
-Each push carries a single `price_lamports` value for the whole unit. For a collection with a 100 SOL floor, the push is `100_000_000_000`.
+Each push carries a single `price_lamports` value for the whole unit, already launch-scaled by the feed. The first push at launch is `625_000_000` (0.625 SOL); for a collectible that has since doubled, the push is `1_250_000_000`.
 
 Four gates apply before a push is absorbed:
 
@@ -55,7 +61,7 @@ value = base_units * index_twap / 1_000_000_000_000
 | `open_short` | New debt is valued at the index; collateral must cover `initial_cr_bps` of it |
 | `withdraw_collateral` | Remaining collateral is re-checked against debt valued at the index |
 | `liquidate` | Positions become liquidatable when collateral falls below `maintenance_cr_bps` of index-valued debt; payouts are index-valued |
-| `accrue_funding` | The premium is `(mark_ema - index_twap) / index_twap`; see [Funding](/concepts/funding) |
+| `accrue_funding` | The premium is `(mark_ema - index_twap) / index_twap`; with a launch-scaled index it reads as how the token has done versus the collectible since launch. See [Funding](/concepts/funding) |
 | `graduate` | Refuses to run until an index exists |
 
 <Warning>

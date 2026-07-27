@@ -39,7 +39,7 @@ description: "Definitions of every term used across the floorlaunch protocol and
 
 **Bonding curve.** The launch-phase pricing mechanism: a constant-product curve over virtual SOL and virtual token reserves. Buys draw from the preminted curve allocation, sells return to it; supply itself never changes.
 
-**Graduation.** The permissionless transition from Bootstrap to Live once the curve raises `graduation_target_sol`. Splits raised SOL into the insurance fund and the AMM's real reserve, and starts the funding clock. Cranked automatically by the indexer keeper, so markets auto-migrate within seconds of hitting the target.
+**Graduation.** The permissionless transition from Bootstrap to Live once the curve raises `graduation_target_sol` (100 SOL under the launch convention, all of which seeds the AMM's real reserve). Starts the funding clock. Cranked automatically by the indexer keeper, so markets auto-migrate within seconds of hitting the target.
 
 **Item swap.** The value-based exchange between a market's token and registered on-chain copies of its underlying: `deposit_item` places a copy in program escrow for `index_twap * 1e12 / mark_ema` base units of tokens, and `withdraw_item` returns the same formula's worth of tokens for a copy. Always equal value at execution, never a fixed tokens-per-item rate.
 
@@ -51,7 +51,7 @@ description: "Definitions of every term used across the floorlaunch protocol and
 
 **Identity escrow.** A keyless system-account PDA (`["escrow", sha256("platform:handle")]`) that accumulates a creator's fee share when a launch names a fee receiver by social handle instead of a wallet. Released to the creator's chosen wallet by the admin-signed `release_escrow` after an off-chain nonce-in-bio identity proof.
 
-**Insurance fund.** Per-market SOL reserve seeded at graduation (`insurance_share_bps` of the raise). Covers liquidation shortfalls when collateral is insufficient for the target payout.
+**Insurance fund.** Per-market SOL reserve optionally seeded at graduation (`insurance_share_bps` of the raise; zero under the launch convention, so the full raise seeds the pool). Covers liquidation shortfalls when collateral is insufficient for the target payout.
 
 **Circuit breaker.** If an index push deviates from the TWAP by more than `breaker_bps`, the observation is recorded but not absorbed, and the market freezes. Frozen markets block trading, reserve draws and repayments, funding, withdrawals, and liquidations; adding collateral stays open. Only the admin unfreezes.
 
@@ -60,5 +60,7 @@ description: "Definitions of every term used across the floorlaunch protocol and
 **Liquidation bonus.** The premium a liquidator earns over the debt value repaid, default 500 bps (5%), paid from the position's collateral and, if needed, the insurance fund.
 
 **Crank.** A permissionless instruction anyone can call to advance protocol state, such as `accrue_funding`. Rate-limited by `min_crank_interval_secs`.
+
+**Unit.** 1,000,000 tokens (1e12 base units), the quote size for the on-chain index and mark. Launch-scaled: defined as worth 0.625 SOL (the migration price) at launch and moving with the collectible from there. `units_per_item_micro` records how many units one physical item was worth at launch.
 
 **Bootstrap / Live / Frozen.** Bootstrap is the curve phase; Live is the graduated phase; frozen is a flag (not a status) that pauses a market in either phase.
