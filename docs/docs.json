@@ -7,9 +7,9 @@
     "library": "lucide"
   },
   "colors": {
-    "primary": "#10B981",
-    "dark": "#10B981",
-    "light": "#34D399"
+    "primary": "#171717",
+    "light": "#FAFAFA",
+    "dark": "#171717"
   },
   "styling": {
     "codeblocks": {
@@ -20,72 +20,112 @@
     }
   },
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "how-it-works",
-          "asset-classes",
-          "glossary"
+        "tab": "Documentation",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "index",
+              "how-it-works",
+              "asset-classes",
+              "glossary"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/price-index",
+              "concepts/launch-curve",
+              "concepts/graduation",
+              "concepts/amm",
+              "concepts/synth-token",
+              "concepts/shorts",
+              "concepts/funding",
+              "concepts/liquidations",
+              "concepts/insurance-fund",
+              "concepts/circuit-breaker",
+              "concepts/parameters"
+            ]
+          },
+          {
+            "group": "Oracle & Relayer",
+            "pages": [
+              "oracle/architecture",
+              "oracle/card-pipeline",
+              "oracle/nft-pipeline",
+              "oracle/operations"
+            ]
+          },
+          {
+            "group": "Program Reference",
+            "pages": [
+              "reference/pdas",
+              "reference/accounts",
+              "reference/instructions",
+              "reference/events",
+              "reference/errors"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "security/risks",
+              "security/attack-vectors"
+            ]
+          },
+          {
+            "group": "Project",
+            "pages": [
+              "roadmap",
+              "faq"
+            ]
+          }
         ]
       },
       {
-        "group": "Core Concepts",
-        "pages": [
-          "concepts/price-index",
-          "concepts/launch-curve",
-          "concepts/graduation",
-          "concepts/amm",
-          "concepts/synth-token",
-          "concepts/shorts",
-          "concepts/funding",
-          "concepts/liquidations",
-          "concepts/insurance-fund",
-          "concepts/circuit-breaker",
-          "concepts/parameters"
+        "tab": "Guides",
+        "icon": "map",
+        "groups": [
+          {
+            "group": "Quickstart",
+            "pages": [
+              "guides/quickstart/launch-a-token",
+              "guides/quickstart/buy-a-token",
+              "guides/quickstart/sell-a-token",
+              "guides/quickstart/redeem-a-card"
+            ]
+          },
+          {
+            "group": "Understanding",
+            "pages": [
+              "guides/economics",
+              "guides/contract-safety"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "guides/going-long",
+              "guides/hedging",
+              "guides/running-a-liquidator",
+              "guides/listing-a-market"
+            ]
+          }
         ]
       },
       {
-        "group": "Guides",
-        "pages": [
-          "guides/going-long",
-          "guides/hedging",
-          "guides/running-a-liquidator",
-          "guides/listing-a-market"
-        ]
-      },
-      {
-        "group": "Oracle & Relayer",
-        "pages": [
-          "oracle/architecture",
-          "oracle/card-pipeline",
-          "oracle/nft-pipeline",
-          "oracle/operations"
-        ]
-      },
-      {
-        "group": "Program Reference",
-        "pages": [
-          "reference/pdas",
-          "reference/accounts",
-          "reference/instructions",
-          "reference/events",
-          "reference/errors"
-        ]
-      },
-      {
-        "group": "Security",
-        "pages": [
-          "security/risks",
-          "security/attack-vectors"
-        ]
-      },
-      {
-        "group": "Project",
-        "pages": [
-          "roadmap",
-          "faq"
+        "tab": "API Reference",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "API Reference",
+            "pages": [
+              "api-reference/index"
+            ]
+          }
         ]
       }
     ]
@@ -97,7 +137,7 @@
   },
   "fonts": {
     "heading": {
-      "family": "Poppins",
+      "family": "Inter",
       "weight": 600
     },
     "body": {
@@ -105,12 +145,12 @@
     }
   },
   "appearance": {
-    "default": "dark"
+    "default": "light"
   },
   "background": {
     "color": {
-      "dark": "#0B0F0E",
-      "light": "#FAFAF8"
+      "light": "#FFFFFF",
+      "dark": "#0A0A0A"
     }
   },
   "logo": {
@@ -130,5 +170,13 @@
       "label": "Launch a token",
       "href": "https://github.com/cocainebit/floorlaunch#readme"
     }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude"
+    ]
   }
 }
