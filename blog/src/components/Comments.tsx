@@ -5,44 +5,56 @@ import { useEffect, useState } from "react";
 
 type Comment = { id: string; author: string; text: string; ts: number };
 
-const STORAGE_KEY = "commas-comments-panel-i";
-
 export default function Comments() {
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, user, login, logout, getAccessToken } =
+    usePrivy();
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setComments(JSON.parse(stored));
-    } catch {}
+    fetch("/api/comments")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d.comments) && setComments(d.comments))
+      .catch(() => {});
   }, []);
 
-  const save = (next: Comment[]) => {
-    setComments(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {}
-  };
-
   const authorLabel = () => {
-    if (!user) return "member";
+    if (!user) return "you";
     if (user.email?.address) return user.email.address;
     const addr = user.wallet?.address;
     if (addr) return `${addr.slice(0, 4)}..${addr.slice(-4)}`;
-    return "member";
+    return "you";
   };
 
-  const post = () => {
+  const post = async () => {
     const text = draft.trim();
-    if (!text) return;
-    const id =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : String(Date.now());
-    save([{ id, author: authorLabel(), text, ts: Date.now() }, ...comments]);
-    setDraft("");
+    if (!text || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "could not post");
+        return;
+      }
+      setComments((prev) => [data.comment, ...prev]);
+      setDraft("");
+    } catch {
+      setError("could not post");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const heading =
@@ -77,14 +89,15 @@ export default function Comments() {
             rows={3}
             className="w-full bg-[#141111] border border-zinc-800 rounded-xl p-3 text-sm text-white placeholder:text-zinc-600 resize-none focus:outline-none focus:border-zinc-600"
           />
+          {error && <p className="text-xs text-red-400">{error}</p>}
           <button
             type="button"
             onClick={post}
-            disabled={!draft.trim()}
-            className="self-end text-white text-sm font-medium px-4 py-2 rounded-xl transition-opacity disabled:opacity-40 hover:opacity-90"
+            disabled={!draft.trim() || busy}
+            className="self-end text-white text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0"
             style={{ backgroundColor: "#3b82f6" }}
           >
-            Post
+            {busy ? "Posting…" : "Post"}
           </button>
         </div>
       ) : (
