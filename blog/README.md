@@ -1,26 +1,36 @@
-# commas blog
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-The commas blog. First post: **The Last Supper, Panel I** — an explanatory
-piece on what commas is and how it works, for a general audience.
+## Getting Started
 
-Built with Next.js + Tailwind. The page layout was scaffolded from an
-open-source blog template; all content, copy, images, figures, and branding
-are commas' own.
-
-## Run
+First, run the development server:
 
 ```bash
-bun install
-bun run dev --port 5175
-# → http://localhost:5175/blog
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-## Structure
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-- `src/app/blog/page.tsx` — the Panel I post (title, hero, body, figures, CTA)
-- `src/app/layout.tsx` — metadata + Inter font
-- `public/panel-i-cover.jpg` — the mainnet 1/1 Panel I artwork (hero)
-- `public/figures/` — the economics diagrams (two-doors, transmission, asymmetry)
-- `public/comma.png` — the comma brand mark
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-Source draft for the copy lives at `../BLOG-MASTER-PANEL-I.md`.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
