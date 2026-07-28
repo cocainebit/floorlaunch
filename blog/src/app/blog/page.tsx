@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import Comments from "@/components/Comments";
 
 export default function BlogPage() {
   return (
@@ -631,15 +632,7 @@ export default function BlogPage() {
             </div>
 
             {/* Comments Card */}
-            <div className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-6 flex flex-col gap-2">
-              <h2 className="text-xl font-bold text-white">No comments yet</h2>
-              <button
-                type="button"
-                className="bg-[#e6ebfe] hover:bg-zinc-50 text-[#6c88f9] font-medium px-4 py-2 rounded-xl transition-colors w-full my-4 h-10"
-              >
-                Login to comment
-              </button>
-            </div>
+            <Comments />
           </div>
         </article>
 
