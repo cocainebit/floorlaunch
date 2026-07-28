@@ -5,6 +5,10 @@ description: "Unit math, fixed supply with a revoked mint, value-based item swap
 
 Each market issues one SPL token, the **synth**. It is a completely standard SPL mint: it sits in associated token accounts, transfers freely, and composes with any wallet or protocol that speaks SPL. What makes it a synthetic is not the token itself but the machinery around it.
 
+<Frame caption="The supply ledger: preminted once, then only moves or shrinks.">
+  <img src="/images/protocol/14-supply-ledger.png" alt="The supply ledger: preminted once, then only moves or shrinks." noZoom />
+</Frame>
+
 ## Fixed supply, mint revoked
 
 Every ***commas*** token is a **fixed-supply SPL token with a revoked mint authority**, on both venues.

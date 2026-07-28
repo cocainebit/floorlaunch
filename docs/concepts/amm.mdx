@@ -5,6 +5,10 @@ description: "The internal constant-product pool that hosts live trading, and th
 
 After [Graduation](/concepts/graduation), the synth trades against an **internal constant-product AMM** owned by the market itself. The pool serves two jobs: it is the liquidity venue for longs, and it produces the **mark price** that the [funding mechanism](/concepts/funding) compares against the oracle index.
 
+<Frame caption="The venue abstraction: internal curve and AMM versus Meteora DBC.">
+  <img src="/images/protocol/19-venue-split.png" alt="The venue abstraction: internal curve and AMM versus Meteora DBC." noZoom />
+</Frame>
+
 ## Real reserves
 
 Unlike the launch curve's virtual reserves, the AMM holds real assets:

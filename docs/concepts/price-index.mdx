@@ -5,6 +5,10 @@ description: "How the on-chain floor price index is fed, smoothed, and consumed 
 
 Every market carries an on-chain **price index**: the protocol's view of what one whole unit of the synth (1,000,000 tokens) is worth, denominated in **lamports per unit**. The index is **launch-scaled**: at launch, one unit is defined as worth 0.625 SOL, the [launch curve](/concepts/launch-curve)'s migration price, and every push moves it proportionally with the collectible from there:
 
+<Frame caption="Two estimator pipelines, one launch-scaled index.">
+  <img src="/images/protocol/11-oracle-pipelines.png" alt="Two estimator pipelines, one launch-scaled index." noZoom />
+</Frame>
+
 ```text
 pushed = collectible_price_now / collectible_price_at_launch * 0.625 SOL
 ```

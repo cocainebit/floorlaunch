@@ -5,6 +5,10 @@ description: "Draw reserve synth against SOL collateral: the short side of every
 
 Every synth token in circulation beyond the launch supply and the [item-swap](/concepts/synth-token#item-swaps) inventory was drawn from the treasury reserve by a short. A short posts SOL collateral and draws synth from the reserve at the current [price index](/concepts/price-index), taking on debt denominated in synth. They profit when the underlying falls (buy back cheaper, repay, keep the difference) and lose when it rises. Supply itself never changes: the reserve was preminted at creation (internal venue) or funded at listing (external venue), and the mint authority is gone.
 
+<Frame caption="The CDP short lifecycle with its collateral-ratio bands.">
+  <img src="/images/protocol/15-cdp.png" alt="The CDP short lifecycle with its collateral-ratio bands." noZoom />
+</Frame>
+
 ## Who shorts, and why
 
 - **Holders of the underlying hedging downside.** A collector holding the physical card or the NFT can draw synth against SOL collateral and sell it, locking in exposure to the current price without selling the asset itself. No sale means no tax event, no loss of the collectible, no exit from the community. This is the structural short supply the market is designed around.

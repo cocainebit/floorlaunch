@@ -5,6 +5,10 @@ description: "The permissionless transition from bonding curve to live market: s
 
 **Graduation** is the moment a market stops being a launchpad token and becomes a live synthetic. It converts the SOL raised on the [Launch Curve](/concepts/launch-curve) into standing AMM liquidity, and switches on the machinery that tethers the token to the [Price Index](/concepts/price-index).
 
+<Frame caption="The market state machine: bootstrap, live, and the frozen flag.">
+  <img src="/images/protocol/13-state-machine.png" alt="The market state machine: bootstrap, live, and the frozen flag." noZoom />
+</Frame>
+
 ## Preconditions
 
 `graduate()` is **permissionless**: anyone can crank it once the conditions hold. In practice migration is automatic: the indexer keeper sweeps every bootstrap market on a short interval, and additionally reacts to each `CurveTraded` event, so the transition lands within seconds of the raise target being crossed with no manual step for the creator or buyers. The call requires:

@@ -5,6 +5,10 @@ description: "The clamped funding rate that tethers the synth's market price to 
 
 ***commas*** has no redemption of synth for the underlying asset. The link between the token's market price and the [price index](/concepts/price-index) is economic: a funding rate continuously transfers value between the two sides of the market until arbitrage pulls the prices back together. This is the same mechanism that pegs perpetual futures, applied to a token.
 
+<Frame caption="Funding rate versus premium, clamped at 100 percent per day.">
+  <img src="/images/protocol/16-funding-curve.png" alt="Funding rate versus premium, clamped at 100 percent per day." noZoom />
+</Frame>
+
 ## The rate
 
 Funding compares the mark price (an EMA, never spot: fed by the internal AMM on internal-venue markets and by the oracle-pushed [`push_mark`](/reference/instructions#push_mark) on external-venue markets; see [AMM](/concepts/amm)) to the index TWAP:
