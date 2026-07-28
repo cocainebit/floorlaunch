@@ -5,7 +5,16 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 type Post = { title: string; sub: string; href: string };
-type TokenResult = { ticker: string; name: string; href: string };
+type TokenResult = {
+  ticker: string;
+  name: string;
+  href: string;
+  image: string | null;
+};
+
+/** flFROG -> $FROG (the launched ticker carries an "fl" prefix). */
+const fmtTicker = (t: string) =>
+  t.toLowerCase().startsWith("fl") ? `$${t.slice(2)}` : `$${t}`;
 
 /** Blog posts, extend as the series grows. */
 const POSTS: Post[] = [
@@ -22,6 +31,21 @@ const POSTS: Post[] = [
  */
 const TOKENS_API =
   process.env.NEXT_PUBLIC_TOKENS_API ?? "http://localhost:8787/listings";
+
+const API_ORIGIN = (() => {
+  try {
+    return new URL(TOKENS_API).origin;
+  } catch {
+    return "";
+  }
+})();
+
+/** Resolve a token image URL, prefixing relative indexer paths. */
+function resolveImg(img: unknown): string | null {
+  if (!img || typeof img !== "string") return null;
+  if (/^(https?:|data:)/.test(img)) return img;
+  return API_ORIGIN + (img.startsWith("/") ? img : `/${img}`);
+}
 
 export default function SearchModal({
   open,
@@ -47,7 +71,8 @@ export default function SearchModal({
           .map((x: any) => ({
             ticker: String(x.ticker),
             name: String(x.name ?? x.ticker),
-            href: "https://commas.art",
+            href: "https://launch.commas.art",
+            image: resolveImg(x.image),
           }));
         setTokens(list);
       })
@@ -133,11 +158,23 @@ export default function SearchModal({
                   target="_blank"
                   rel="noreferrer"
                   onClick={onClose}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
                 >
-                  <span className="text-sm text-white">{t.name}</span>
-                  <span className="text-xs font-mono text-zinc-500">
-                    {t.ticker}
+                  <span className="flex items-center gap-3 min-w-0">
+                    {t.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={t.image}
+                        alt=""
+                        className="w-7 h-7 rounded-full object-cover shrink-0 bg-[#141111]"
+                      />
+                    ) : (
+                      <span className="w-7 h-7 rounded-full shrink-0 bg-[#141111] border border-zinc-800" />
+                    )}
+                    <span className="text-sm text-white truncate">{t.name}</span>
+                  </span>
+                  <span className="text-xs font-mono text-zinc-500 shrink-0">
+                    {fmtTicker(t.ticker)}
                   </span>
                 </Link>
               ))
