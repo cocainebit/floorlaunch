@@ -124,7 +124,7 @@ export default function BlogPage() {
           </button>
         </div>
 
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 opacity-70">
           <button
             type="button"
             className="relative flex items-center gap-2 px-4 py-2 cursor-pointer hover:text-white transition-colors"
