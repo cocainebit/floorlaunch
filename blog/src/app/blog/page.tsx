@@ -9,17 +9,31 @@ import {
   type LucideIcon,
   Mail,
   MessageCircle,
-  Moon,
   PenLine,
   Search,
   Share2,
   Twitter,
 } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
 import Image from "next/image";
 import Link from "next/link";
 import Comments from "@/components/Comments";
 
 export default function BlogPage() {
+  const { ready, authenticated, user, login, logout } = usePrivy();
+  const identity = user?.email?.address
+    ? user.email.address
+    : user?.wallet?.address
+      ? `${user.wallet.address.slice(0, 4)}..${user.wallet.address.slice(-4)}`
+      : "Account";
+  const onSignIn = () => {
+    if (!ready) return;
+    authenticated ? logout() : login();
+  };
+  const onSubscribe = () => {
+    if (!ready || authenticated) return;
+    login();
+  };
   return (
     <div className="min-h-screen bg-[#141111] text-white selection:bg-purple-500/30 font-sans">
       {/* Header */}
@@ -171,59 +185,10 @@ export default function BlogPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Dark Mode Button */}
-          <button
-            type="button"
-            className="relative p-2 hover:text-white transition-colors"
-            style={{
-              borderRadius: "9999px",
-              color: "hsl(0 0% 80%)",
-            }}
-          >
-            <div
-              className="absolute inset-0 overflow-hidden pointer-events-none"
-              style={{
-                borderRadius: "inherit",
-                boxShadow:
-                  "0 2px 4px rgba(0, 0, 0, 0.08), 0 0 8px rgba(0, 0, 0, 0.04)",
-                transformOrigin: "50% 50%",
-                transform: "scaleX(1.00003) scaleY(1.00019)",
-              }}
-            >
-              <div
-                className="absolute inset-0"
-                style={{
-                  zIndex: 0,
-                  backdropFilter: "blur(1px) saturate(120%)",
-                  WebkitBackdropFilter: "blur(1px) saturate(120%)",
-                  isolation: "isolate",
-                  borderRadius: "inherit",
-                }}
-              />
-              <div
-                className="absolute inset-0"
-                style={{
-                  zIndex: 1,
-                  background: "#1c1817",
-                  borderRadius: "inherit",
-                }}
-              />
-              <div
-                className="absolute inset-0 overflow-hidden"
-                style={{
-                  zIndex: 2,
-                  boxShadow:
-                    "inset 0 0 0 1px hsl(30 8% 18% / 0.4), inset 1px 1px 0 0 rgba(255, 255, 255, 0.1)",
-                  borderRadius: "inherit",
-                }}
-              />
-            </div>
-            <Moon className="w-5 h-5 relative" style={{ zIndex: 3 }} />
-          </button>
-
           {/* Sign In Button */}
           <button
             type="button"
+            onClick={onSignIn}
             className="hidden sm:block relative text-sm font-medium hover:text-white transition-colors px-4 py-2"
             style={{
               borderRadius: "calc(0.5rem + 8px)",
@@ -269,19 +234,20 @@ export default function BlogPage() {
               />
             </div>
             <span className="relative" style={{ zIndex: 3 }}>
-              Sign in
+              {authenticated ? identity : "Sign in"}
             </span>
           </button>
 
           <button
             type="button"
+            onClick={onSubscribe}
             className="text-[#27261b] text-sm font-medium px-4 py-2 rounded-full transition-colors shadow-lg hover:opacity-90"
             style={{
               backgroundColor: "#3550bf",
               boxShadow: "0 10px 15px -3px rgba(59, 130, 246, 0.2)",
             }}
           >
-            Subscribe
+            {authenticated ? "Subscribed" : "Subscribe"}
           </button>
         </div>
       </header>
@@ -613,10 +579,11 @@ export default function BlogPage() {
               </div>
               <button
                 type="button"
+                onClick={onSubscribe}
                 className="text-[#27261b] text-sm font-medium px-4 py-2.5 rounded-full transition-colors w-full md:w-auto hover:opacity-90"
                 style={{ backgroundColor: "#3550bf" }}
               >
-                Subscribe
+                {authenticated ? "Subscribed" : "Subscribe"}
               </button>
             </div>
 
