@@ -74,4 +74,4 @@ A few couplings worth knowing when tuning:
 - **Breaker vs push interval.** `breaker_bps` bounds movement per accepted push, and `min_push_interval_secs` bounds push frequency, so together they cap the index's maximum slew rate even under a compromised oracle key.
 - **Staleness vs push cadence.** `max_index_age_secs` should comfortably exceed the relayer's push interval (and `min_push_interval_secs`), or routine gaps will lock CDP operations; a 4h guard against an hourly push cadence leaves room for a few missed cycles.
 - **Initial vs maintenance CR.** The gap (150% vs 120% illustrative) is the shorter's buffer: how much the index can rise before a fresh position at minimum collateral becomes liquidatable.
-- **Funding clamp vs hedge reserve.** Worst-case daily value transfer from a manipulated index is `max_open_interest * max_funding_bps_per_day / 10000`. These two parameters are the security budget; see [Attack Vectors](/security/attack-vectors).
+- **Funding clamp vs hedge reserve.** Worst-case daily value transfer from a manipulated index is `max_open_interest * max_funding_bps_per_day / 10000`. These two parameters are the security budget.

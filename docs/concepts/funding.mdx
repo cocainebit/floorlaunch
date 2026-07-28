@@ -55,4 +55,4 @@ Because there is no oracle-priced redemption, a manipulated index print cannot d
 max damage per day <= total_open_interest * max_funding_bps_per_day / 10_000
 ```
 
-A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short debt is bounded by the finite [hedge reserve](/concepts/parameters). The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason floorlaunch can reference thin external markets at all; see [Attack Vectors](/security/attack-vectors).
+A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short debt is bounded by the finite [hedge reserve](/concepts/parameters). The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason floorlaunch can reference thin external markets at all.

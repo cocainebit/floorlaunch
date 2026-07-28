@@ -112,13 +112,6 @@
               "reference/events",
               "reference/errors"
             ]
-          },
-          {
-            "group": "Security",
-            "pages": [
-              "security/risks",
-              "security/attack-vectors"
-            ]
           }
         ]
       },
