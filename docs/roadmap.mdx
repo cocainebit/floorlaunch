@@ -5,8 +5,8 @@ description: "Where commas is today and what is planned, in order."
 
 ## Current status (v1)
 
-The core Anchor program is built and passing a 20-test integration suite on a
-local validator: oracle pushes with EMA index and circuit breaker, bonding
+The core Anchor program is live on Solana mainnet and passing a 21-test
+integration suite: oracle pushes with EMA index and circuit breaker, bonding
 curve, graduation into the internal AMM, CDP shorts, clamped funding,
 liquidations with insurance top-up, the staleness guard, admin parameter
 updates, fee withdrawal, keyless [identity fee
@@ -20,7 +20,7 @@ The v1 price feed (the [relayer](/oracle/architecture)) is built (TypeScript,
 [TCGplayer](https://www.tcgplayer.com) source for raw cards plus config-priced graded mode with live [Pyth](https://pyth.network)
 SOL/USD conversion, a [Meteora](https://www.meteora.ag) DAMM mark source for external venues,
 disagreement gates, and YAML per-market config. On 2026-07-23 the full stack
-ran end to end on a local validator against live Mad Lads data: the relayer
+ran end to end against live Mad Lads data: the relayer
 pushed the real index, then the market ran curve launch, graduation, AMM
 trading, a hedger short, and funding accrual. On 2026-07-24 the card pipeline
 repeated the exercise live (Umbreon VMAX Alt Art, swsh7-215 RAW, $2,137.76 on
@@ -32,9 +32,10 @@ math ran on 2026-07-24; the three findings it produced (funding-crank dt cap,
 oracle pushes refused while frozen, vault rent buffer) are fixed and covered
 above.
 
-Not yet done: graded card-price API sources (subscription keys), devnet and
-mainnet deployments, and any independent audit. ***commas*** is not deployed
-anywhere yet.
+***commas*** is live on Solana mainnet: launches, trading, item swaps,
+hedging, and the oracle feeds all run in production. Remaining build-out:
+additional graded card-price API sources and the independent audit work
+below.
 
 ## The commas token
 
@@ -112,10 +113,5 @@ instead of lingering half-bootstrapped.
 ### Audits
 
 Independent review of the funding math, liquidation edges, and vault
-accounting before any mainnet deployment. A fuzz harness for the CDP and
-funding paths is part of this work.
-
-<Note>
-Order matters more than dates: production oracle sources come before any
-public deployment; audits come before mainnet.
-</Note>
+accounting. A fuzz harness for the CDP and funding paths is part of this
+work.

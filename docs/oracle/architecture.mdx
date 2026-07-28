@@ -6,7 +6,7 @@ description: "How the off-chain price relayer computes and pushes the floor inde
 <Note>
 The v1 relayer is **built** and lives at `relayer/` in the repository (TypeScript, run
 with `npm run once` for a single cycle or `npm start` for the loop). The full stack was
-exercised end to end on a local validator against live Mad Lads data from [Magic Eden](https://magiceden.io)
+exercised end to end against live Mad Lads data from [Magic Eden](https://magiceden.io)
 on 2026-07-23: the relayer estimated and pushed the index, then the market ran curve
 launch, graduation, AMM trading, a hedger short, and funding accrual against it. On
 2026-07-24 the card pipeline did the same live: Umbreon VMAX Alt Art (swsh7-215, RAW,
