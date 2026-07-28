@@ -51,7 +51,10 @@ export default function Comments() {
       : `${comments.length} comment${comments.length > 1 ? "s" : ""}`;
 
   return (
-    <div className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4">
+    <div
+      id="comments"
+      className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4"
+    >
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">{heading}</h2>
         {ready && authenticated && (

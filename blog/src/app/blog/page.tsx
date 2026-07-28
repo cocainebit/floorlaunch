@@ -15,12 +15,15 @@ import {
   Twitter,
 } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Comments from "@/components/Comments";
+import SubscribeCard from "@/components/SubscribeCard";
 
 export default function BlogPage() {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const [shared, setShared] = useState(false);
   const identity = user?.email?.address
     ? user.email.address
     : user?.wallet?.address
@@ -30,9 +33,16 @@ export default function BlogPage() {
     if (!ready) return;
     authenticated ? logout() : login();
   };
-  const onSubscribe = () => {
-    if (!ready || authenticated) return;
-    login();
+  const scrollToId = (id: string) =>
+    document
+      .getElementById(id)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const onShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShared(true);
+      setTimeout(() => setShared(false), 1500);
+    } catch {}
   };
   return (
     <div className="min-h-screen bg-[#141111] text-white selection:bg-purple-500/30 font-sans">
@@ -164,23 +174,15 @@ export default function BlogPage() {
             </div>
 
             {/* Content Layer */}
-            <div
-              className="w-6 h-6 relative rounded overflow-hidden"
-              style={{ zIndex: 3 }}
-            >
+            <div className="relative" style={{ zIndex: 3 }}>
               <Image
-                src="/assets/banker-header.avif"
-                alt="Logo"
-                fill
-                className="object-cover"
+                src="/commas-art-white.png"
+                alt="commas.art"
+                width={104}
+                height={16}
+                className="h-4 w-auto object-contain"
               />
             </div>
-            <span
-              className="text-base font-medium relative"
-              style={{ zIndex: 3 }}
-            >
-              commas
-            </span>
           </button>
         </div>
 
@@ -189,7 +191,7 @@ export default function BlogPage() {
           <button
             type="button"
             onClick={onSignIn}
-            className="hidden sm:block relative text-sm font-medium hover:text-white transition-colors px-4 py-2"
+            className="hidden sm:block relative text-sm font-medium hover:text-white transition-all duration-200 hover:-translate-y-0.5 active:scale-95 px-4 py-2"
             style={{
               borderRadius: "calc(0.5rem + 8px)",
               color: "hsl(0 0% 80%)",
@@ -240,14 +242,14 @@ export default function BlogPage() {
 
           <button
             type="button"
-            onClick={onSubscribe}
-            className="text-[#27261b] text-sm font-medium px-4 py-2 rounded-full transition-colors shadow-lg hover:opacity-90"
+            onClick={() => scrollToId("subscribe")}
+            className="text-[#27261b] text-sm font-medium px-4 py-2 rounded-full transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg hover:opacity-90"
             style={{
               backgroundColor: "#3550bf",
               boxShadow: "0 10px 15px -3px rgba(59, 130, 246, 0.2)",
             }}
           >
-            {authenticated ? "Subscribed" : "Subscribe"}
+            Subscribe
           </button>
         </div>
       </header>
@@ -300,6 +302,7 @@ export default function BlogPage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={() => scrollToId("comments")}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-colors border border-zinc-800 text-white bg-[#1c1817] hover:bg-zinc-800 hover:text-white h-10 w-10"
                 aria-label="Jump to comments"
               >
@@ -309,11 +312,12 @@ export default function BlogPage() {
               </button>
               <button
                 type="button"
+                onClick={onShare}
                 className="flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-colors border border-zinc-800 text-white bg-[#1c1817] hover:bg-zinc-800 hover:text-white h-10 px-4 py-2 gap-2 sm:w-fit w-full"
                 aria-label="Share this post"
               >
                 <Share2 className="h-4 w-4" />
-                <span>Share</span>
+                <span>{shared ? "Copied" : "Share"}</span>
               </button>
             </div>
           </div>
@@ -561,41 +565,36 @@ export default function BlogPage() {
 
           <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full mb-8">
             {/* Subscribe Card */}
-            <div className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0">
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <Image
-                  src="https://img.paragraph.com/cdn-cgi/image/format=auto,width=256,quality=85/https://storage.googleapis.com/papyrus_images/3e73016bbdff778e5e5c42b99c6ebe4d.jpg"
-                  alt="commas"
-                  width={56}
-                  height={56}
-                  className="rounded-md shrink-0 w-14 h-14 object-cover"
-                />
-                <div className="flex flex-col gap-1 flex-1 min-w-0">
-                  <h3 className="font-bold text-white text-xl line-clamp-1">
-                    Subscribe to commas
-                  </h3>
-                  <p className="text-sm text-zinc-500">The Last Supper series</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onSubscribe}
-                className="text-[#27261b] text-sm font-medium px-4 py-2.5 rounded-full transition-colors w-full md:w-auto hover:opacity-90"
-                style={{ backgroundColor: "#3550bf" }}
-              >
-                {authenticated ? "Subscribed" : "Subscribe"}
-              </button>
-            </div>
+            <SubscribeCard />
 
-            {/* Arweave TX Card */}
-            <div className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-4 relative group cursor-pointer hover:border-zinc-700 transition-colors">
-              <div className="absolute top-4 right-4 text-zinc-500 group-hover:text-zinc-300">
-                <ExternalLink className="w-4 h-4" />
+            {/* Panel I Asset Card */}
+            <div className="bg-[#1c1817] border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <h3 className="font-bold text-white">Panel I asset</h3>
+                <p className="text-sm text-zinc-500 font-mono truncate">
+                  7iMMDFqAp2W5S4SiYKQWVC4QksDGvGRFQarzrpyZqA9N
+                </p>
               </div>
-              <h3 className="font-bold text-white mb-1">Panel I asset</h3>
-              <p className="text-sm text-zinc-500 font-mono truncate pr-8">
-                7iMMDFqAp2W5S4SiYKQWVC4QksDGvGRFQarzrpyZqA9N
-              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="https://solscan.io/token/7iMMDFqAp2W5S4SiYKQWVC4QksDGvGRFQarzrpyZqA9N"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-medium border border-zinc-800 text-white bg-[#141111] hover:bg-zinc-800 rounded-xl px-4 h-10 transition-colors"
+                >
+                  Solscan
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href="https://core.metaplex.com/explorer/7iMMDFqAp2W5S4SiYKQWVC4QksDGvGRFQarzrpyZqA9N"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-medium border border-zinc-800 text-white bg-[#141111] hover:bg-zinc-800 rounded-xl px-4 h-10 transition-colors"
+                >
+                  Metaplex
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
 
             {/* Comments Card */}
@@ -678,19 +677,23 @@ export default function BlogPage() {
             className="text-xs text-center text-[#cccccc] mb-4 flex flex-row flex-nowrap gap-4 justify-center"
           >
             <Link
-              href="/explore"
+              href="https://commas.art"
+              target="_blank"
+              rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
             >
-              Popular
-            </Link>
-            <Link
-              href="/explore/publications"
-              className="shrink-0 hover:text-white transition-colors"
-            >
-              Trending
+              Home
             </Link>
             <Link
               href="https://commas.art"
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 hover:text-white transition-colors"
+            >
+              Launch
+            </Link>
+            <Link
+              href="https://commas.art/privacy"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
@@ -698,20 +701,12 @@ export default function BlogPage() {
               Privacy
             </Link>
             <Link
-              href="https://commas.art"
+              href="https://commas.art/terms"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
             >
               Terms
-            </Link>
-            <Link
-              href="https://commas.art"
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 hover:text-white transition-colors"
-            >
-              Home
             </Link>
           </nav>
         </footer>
