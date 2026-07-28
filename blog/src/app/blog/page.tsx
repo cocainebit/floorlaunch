@@ -155,7 +155,7 @@ export default function BlogPage() {
             >
               <Image
                 src="/assets/banker-header.avif"
-                alt="Bankr Logo"
+                alt="Logo"
                 fill
                 className="object-cover"
               />
@@ -164,7 +164,7 @@ export default function BlogPage() {
               className="text-base font-medium relative"
               style={{ zIndex: 3 }}
             >
-              Bankr
+              commas
             </span>
           </button>
         </div>
@@ -300,7 +300,7 @@ export default function BlogPage() {
         <div className="w-full aspect-[2/1] bg-[#a881fc] rounded-2xl mb-12 relative overflow-hidden shadow-2xl shadow-purple-900/20 group">
           <Image
             src="/assets/blog-banner.avif"
-            alt="Crypto Doesn't Have to Be Complicated"
+            alt="The Last Supper, Panel I"
             fill
             className="object-cover"
             priority
@@ -310,23 +310,22 @@ export default function BlogPage() {
         {/* Title Block */}
         <div className="mb-12 max-w-5xl mx-auto">
           <h1 className="text-3xl md:text-4xl lg:text-3xl font-bold mb-4 tracking-tight leading-[1.1] whitespace-nowrap overflow-hidden text-ellipsis sm:whitespace-normal">
-            Crypto Doesn't Have to Be Complicated
+            The Last Supper, Panel I: a token that owns a price
           </h1>
           <p className="text-xl text-zinc-400 font-light">
-            Meet Bankr: Your Friendly AI-Powered Crypto Companion
+            Every commas token is launched against a real collectible market,
+            and convertible into it.
           </p>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-8 pb-8 gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-xs font-bold text-purple-200">
-                SS
+                ,
               </div>
               <div>
-                <div className="font-medium text-white text-sm">
-                  Shira Stember
-                </div>
+                <div className="font-medium text-white text-sm">commas</div>
                 <div className="text-sm text-zinc-500">
-                  3 min read · July 24, 2025
+                  5 min read · The Last Supper
                 </div>
               </div>
             </div>
@@ -356,267 +355,229 @@ export default function BlogPage() {
         {/* Article Body */}
         <article className="prose prose-invert prose-lg max-w-3xl mx-auto text-zinc-300 leading-relaxed">
           <p className="mb-6">
-            Crypto often feels like everyone's speaking a different language and
-            you weren't invited into the group chat. It's no surprise to us that
-            almost 40% of people take one look at crypto and go "no thanks, I'm
-            good" (
-            <Link
-              href="https://swyftx.com/wp-content/uploads/2024/09/swyftx-cryptocurrency-survey-2024.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-              style={{ color: "#3b82f6" }}
-            >
-              Swyftx Survey, 2024
-            </Link>
-            ).
+            Every launchpad sells you the same thing: a ticker, a picture, and a
+            prayer that attention holds. The token is backed by nothing because
+            there is nothing behind it. When the crowd moves on, there is no
+            floor under the floor.
           </p>
 
-          <p className="mb-4">
-            <Link
-              href="https://cointelegraph.com/news/crypto-adoption-lack-technical-literacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-              style={{ color: "#3b82f6" }}
-            >
-              Lance Morginn
-            </Link>
-            , president of Blockchain Intelligence Group, explains:
+          <p className="mb-6">
+            commas launches tokens differently. Every token is launched against a
+            real collectible market: a PSA 10 graded card, or the floor of an NFT
+            collection. Not inspired by it. Priced against it, with a live feed,
+            and convertible into it.
+          </p>
+
+          <p className="mb-12">
+            That last part is the whole story, so let us take it slowly.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            One token, one real thing
+          </h2>
+
+          <p className="mb-6">
+            When someone launches a token on commas, they pick the underlying:
+            say, a PSA 10 Umbreon VMAX. From that moment the token has a
+            reference price that does not come from its own chart. It comes from
+            the card&apos;s real market, the places where actual copies actually
+            sell.
           </p>
 
           <blockquote className="border-l-2 border-[#3b82f6] pl-6 my-8 italic text-zinc-400">
-            "On first impressions, it can appear too technical and irrelevant to
-            traditional money. Words such as blockchain, tokens and technology
-            can lead to a sense of intimidation, discouraging people from
-            checking crypto out."
+            One million tokens represent one card. If the card is worth $2,100, a
+            full unit of tokens is worth about $2,100 of exposure. The card
+            doubles, your exposure doubles.
           </blockquote>
 
           <p className="mb-12">
-            When crypto is complicated, most people give up. We built Bankr to
-            make crypto simple and accessible for everyone.
+            You never graded, shipped, insured, or vaulted anything. You just
+            hold price exposure to a real thing.
           </p>
 
           <hr className="my-8 border-white/[0.08]" />
 
           <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            The One Thing Crypto Twitter Actually Agrees On
+            The launch is the boring part, on purpose
           </h2>
 
           <p className="mb-6">
-            Here's what's actually happening: 28% of people want to get into
-            crypto but can't figure it out (
-            <Link
-              href="http://cryptoliteracy.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-              style={{ color: "#3b82f6" }}
-            >
-              CryptoLiteracy.org
-            </Link>
-            ). In the UK, it's even worse. 30% of adults took one look at crypto
-            and said 'absolutely not' (
-            <Link
-              href="https://www.fca.org.uk/publications/research/cryptoasset-consumer-research-2023"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-              style={{ color: "#3b82f6" }}
-            >
-              FCA, 2023
-            </Link>
-            ).
+            Launching works like every launchpad you already know, and that is
+            deliberate. Every token starts at a 25 SOL market cap on a bonding
+            curve. When the curve has raised 100 SOL, the market migrates
+            automatically to an AMM, and the entire 100 SOL goes into the pool.
+            No team allocation, no liquidity games: what was raised is what you
+            trade against.
           </p>
 
-          <p className="mb-4">
-            Good news though...Bankr isn't alone in recognizing the need for
-            simplification. Ethereum’s founder Vitalik Buterin emphasized the
-            need for more intuitive design when he stated:
+          <p className="mb-12">
+            Supply is fixed forever the moment the token is created. Nobody,
+            including us, can ever mint more. Launching costs 0.1 SOL, takes
+            about a minute, and the creator earns half of every trading fee the
+            market ever generates. You can even route those fees to someone else:
+            an X account, a YouTube channel, a forum legend who has no idea you
+            exist. The fees wait in escrow until the real person claims them.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            The two doors
+          </h2>
+
+          <p className="mb-6">
+            Here is where commas stops being a launchpad and becomes a market.
+            Every market has two ways in and two ways out. The first is the SOL
+            door: buy and sell with SOL, like any token, and these trades pay a
+            0.70% fee.
+          </p>
+
+          <p className="mb-6">
+            The second is the card door. If you hold a real, vaulted copy of the
+            collectible, you can deposit it and receive tokens worth exactly what
+            the card is worth. And it works in reverse: pay tokens worth one card,
+            and walk away with an actual card from the pool.
           </p>
 
           <blockquote className="border-l-2 border-[#3b82f6] pl-6 my-8 italic text-zinc-400">
-            "If we want crypto to be something that a billion people use, we
-            need to make wallets and applications much more intuitive and much
-            more user-friendly." (
+            The card door is completely free. No fee in either direction, on
+            purpose: bringing the real thing into the market is the behavior we
+            most want to reward.
+          </blockquote>
+
+          <p className="mb-12">
+            The pool is not an abstraction. It holds real copies that real
+            holders deposited, and any of them can be claimed by anyone willing
+            to pay what a copy is worth.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            Why token buying moves the real card
+          </h2>
+
+          <p className="mb-6">
+            This is the question everyone should ask. Say a wave of buying pushes
+            the token above the card&apos;s real price. The token now trades
+            rich, so tokens are worth more than the card they represent. That gap
+            is free money for anyone holding a real copy: deposit the card,
+            receive tokens worth more than the card, sell the difference.
+          </p>
+
+          <p className="mb-6">
+            Where do those people get copies? The cheapest place possible: they
+            buy the card&apos;s floor listings on the open market. Every copy
+            they deposit gets locked in the pool, and every floor listing they
+            bought is gone. Fewer copies for sale means a firmer, higher floor.
+            The live price feed sees the higher floor and raises the token&apos;s
+            reference price. The loop closes, one level up.
+          </p>
+
+          <p className="mb-12">
+            Token demand literally consumes the collectible&apos;s cheapest
+            supply. A memecoin pump buys nothing but its own chart. A commas pump
+            buys the floor of a real market.
+          </p>
+
+          <p className="mb-12">
+            And the reverse is softer than you would expect. If the token dumps
+            below the card&apos;s value, the cheap exit is to buy tokens and
+            redeem real cards from the pool, which supports the token on the way
+            down. The pool can only release the copies it actually holds, so the
+            downside is capped in a way the upside is not. It absorbs copies
+            aggressively and gives them back reluctantly.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            For the people who already own the cards
+          </h2>
+
+          <p className="mb-6">
+            If you hold the collectible, commas gives you two tools that never
+            existed for cards before. You can sell without selling: deposit a
+            copy when the token is rich, take the premium, and buy back later, so
+            your collection becomes a yield instrument.
+          </p>
+
+          <p className="mb-12">
+            Or you can hedge: lock SOL as collateral, draw tokens against it, and
+            sell them to flatten your exposure without touching the physical
+            card. When the token trades above the card&apos;s real price, the
+            market literally pays hedgers to lean against it.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            What keeps it honest
+          </h2>
+
+          <p className="mb-12">
+            Supply is fixed at creation and can only shrink; the mint is dead.
+            The curve&apos;s terms cannot be edited after launch, ever. The price
+            feed is smoothed, rate-limited, and wrapped in a circuit breaker: if
+            a bad print deviates too far, the market freezes instead of moving.
+            And swap pricing uses a time-averaged price, so a single-transaction
+            sandwich cannot move the rate against you.
+          </p>
+
+          <hr className="my-8 border-white/[0.08]" />
+
+          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
+            What is live, and what is next
+          </h2>
+
+          <p className="mb-6">
+            The full protocol is live: launches, trading, the card door, hedging,
+            and the price feeds, with the docs at{" "}
             <Link
-              href="https://www.youtube.com/watch?v=kibXhFxiCqY"
+              href="https://commas.art"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:underline"
               style={{ color: "#3b82f6" }}
             >
-              DevCon Keynote
+              commas.art
+            </Link>{" "}
+            covering every detail from a quickstart to the exact math.
+          </p>
+
+          <p className="mb-12">
+            A commas token will launch on{" "}
+            <Link
+              href="https://pump.fun"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+              style={{ color: "#3b82f6" }}
+            >
+              pump.fun
             </Link>
-            )
-          </blockquote>
-
-          <p className="mb-12">
-            That's literally our whole vibe. Making crypto so clean, everyone
-            can use it.
-          </p>
-
-          <hr className="my-8 border-white/[0.08]" />
-
-          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            Bankr: Your New Crypto Bestie
-          </h2>
-
-          <p className="mb-6">
-            Bankr removes all the complexity, sprinkles in some friendly vibes
-            and makes crypto simple and enjoyable. No more juggling exchanges,
-            wallets, and seed phrases. Just tell Bankr what you want.
-          </p>
-
-          <div className="my-10 relative">
-            <div className="float-left w-full sm:w-1/2 mr-6 mb-6">
-              <Image
-                src="https://img.paragraph.com/cdn-cgi/image/format=auto,width=1080,quality=85/https://storage.googleapis.com/papyrus_images/807e30b9b0a8934e88584e805335273f.png"
-                alt="Bankr Interface Screenshot"
-                width={780}
-                height={218}
-                className="w-full h-auto rounded-lg"
-              />
-            </div>
-
-            <p className="mb-6">
-              That's it. Boom. Done. Bankr handles everything. Trading, checking
-              your balance, moving crypto between chains... it all works the
-              same way.
-            </p>
-
-            <p className="mb-12">
-              So yes, Bankr is super simple, but what really makes this all feel
-              so easy is that Bankr already lives in your social feed. Tag{" "}
-              <Link
-                href="https://x.com/bankrbot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-                style={{ color: "#3b82f6" }}
-              >
-                @bankrbot on X/Twitter
-              </Link>{" "}
-              or{" "}
-              <Link
-                href="https://farcaster.xyz/bankr"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#3b82f6] hover:text-[#3b82f6] hover:underline"
-              >
-                @bankr Farcaster
-              </Link>{" "}
-              or connect through your personal Bankr Terminal (
-              <Link
-                href="http://bankr.bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-                style={{ color: "#3b82f6" }}
-              >
-                bankr.bot
-              </Link>
-              ). No new apps to download, no new passwords to remember. Just hit
-              Bankr up wherever you're already scrolling.
-            </p>
-          </div>
-
-          <div className="clear-both" />
-
-          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            For Everyone (Yes, Even Your Normie Friends)
-          </h2>
-
-          <p className="mb-12">
-            Whether you just learned what ETH stands for or you've been hodling
-            since 2017, Bankr's got your back. Complete beginners love it
-            because Bankr is always there to hold your hand and answer all your
-            questions. Advanced traders love it because it's a full on trading
-            app that is fast, secure and ensures you have full control over
-            funds at all times. Win-win for everyone and we are just getting
-            started.
-          </p>
-
-          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            The Community Said "Ship It" and We Did
-          </h2>
-
-          <p className="mb-6">
-            Bankr started on Farcaster which is full of people experimenting,
-            building and shipping real products weekly or even daily. That
-            culture of collaboration, feedback, and transparency shaped a lot
-            about how Bankr was developed. Bankr was and continues to be built
-            alongside our community, regularly turning community input into new
-            features people actually want, need and use.
-          </p>
-
-          <p className="mb-6">
-            Did you know that a community member used{" "}
-            <span style={{ color: "#3b82f6" }}>@bankrbot</span> to deploy a
-            token through Clanker. They called it $BNKR. Plot twist? Our team
-            had no idea it was happening. Most teams would've panicked. We said
-            "this is our token now." This is what it looks like when you truly
-            build with your community, not just for them.
-          </p>
-
-          <p className="mb-12">
-            Because Bankr isn't just about making crypto simple; it's about
-            exploring what's possible when AI, social, and crypto collide in the
-            wildest ways.
-          </p>
-
-          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            Cross-Chain, Not Chained Down
-          </h2>
-
-          <p className="mb-6">
-            We don’t believe in staying stuck in one lane. Our $BNKR token lives
-            on Base (shoutout to Coinbase’s speedy Layer-2). We’re cross-chain
-            by design—supporting Polygon, Ethereum Mainnet, and Solana too.
-            Whether you’re swapping, sending, or building, we make sure you’re
-            not limited to one ecosystem.
-          </p>
-
-          <p className="mb-12">
-            Why? Because crypto isn't just one network anymore. We want you to
-            move seamlessly, skip the crazy fees, and access everything the
-            multi-chain world has to offer. So go ahead—explore, build, and
-            connect, wherever your wallet takes you. Bankr's there.
-          </p>
-
-          <hr className="my-8 border-white/[0.08]" />
-
-          <h2 className="text-2xl font-bold text-white mt-12 mb-4">
-            Ready to Get Started?
-          </h2>
-
-          <p className="mb-6">
-            So that's Bankr. That's why we built it. That's why we brought
-            together a team who genuinely believes crypto should be for
-            everyone.
-          </p>
-
-          <p className="mb-6">
-            We made something different. Something that just works. Something
-            our friends actually use, and hopefully something you and your
-            friends will love too.
-          </p>
-
-          <p className="mb-6">
-            If you've been with us from the beginning, thank you. If you're new,
-            welcome.
-          </p>
-
-          <p className="mb-12">
-            Give it a shot. Send a transaction. See what crypto feels like when
-            it's not trying to be complicated.
+            . The announcement and the official contract address will come from{" "}
+            <Link
+              href="https://x.com/commasdotart"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+              style={{ color: "#3b82f6" }}
+            >
+              @commasdotart
+            </Link>{" "}
+            and nowhere else. Three panels were minted on Solana mainnet to mark
+            the start. This post was Panel I. The next one opens the economics
+            all the way up.
           </p>
 
           <div className="flex flex-col items-center gap-8 mt-12 mb-20">
             <p className="text-lg font-medium text-white text-center">
-              👉 Start vibing with{" "}
-              <span style={{ color: "#3b82f6" }}>@bankrbot</span> on X/Twitter
-              or <span style={{ color: "#3b82f6" }}>@bankr</span> on Farcaster.
+              👉 Follow{" "}
+              <span style={{ color: "#3b82f6" }}>@commasdotart</span> on X for
+              the token announcement and the official contract address.
             </p>
 
             <button
@@ -627,7 +588,7 @@ export default function BlogPage() {
                 boxShadow: "0 10px 15px -3px rgba(59, 130, 246, 0.2)",
               }}
             >
-              Get Started with Bankr
+              Launch a token on commas
             </button>
           </div>
 
@@ -637,16 +598,16 @@ export default function BlogPage() {
               <div className="flex items-center gap-4 flex-1 min-w-0">
                 <Image
                   src="https://img.paragraph.com/cdn-cgi/image/format=auto,width=256,quality=85/https://storage.googleapis.com/papyrus_images/3e73016bbdff778e5e5c42b99c6ebe4d.jpg"
-                  alt="Bankr"
+                  alt="commas"
                   width={56}
                   height={56}
                   className="rounded-md shrink-0 w-14 h-14 object-cover"
                 />
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <h3 className="font-bold text-white text-xl line-clamp-1">
-                    Subscribe to Bankr
+                    Subscribe to commas
                   </h3>
-                  <p className="text-sm text-zinc-500">&lt;100 subscribers</p>
+                  <p className="text-sm text-zinc-500">The Last Supper series</p>
                 </div>
               </div>
               <button
@@ -663,9 +624,9 @@ export default function BlogPage() {
               <div className="absolute top-4 right-4 text-zinc-500 group-hover:text-zinc-300">
                 <ExternalLink className="w-4 h-4" />
               </div>
-              <h3 className="font-bold text-white mb-1">Arweave TX</h3>
+              <h3 className="font-bold text-white mb-1">Panel I asset</h3>
               <p className="text-sm text-zinc-500 font-mono truncate pr-8">
-                Tk83H27cWGUie1ZUlpSv8R25XTnfTrjxyGj4GzxrxOA
+                7iMMDFqAp2W5S4SiYKQWVC4QksDGvGRFQarzrpyZqA9N
               </p>
             </div>
 
@@ -693,7 +654,7 @@ export default function BlogPage() {
 
           <div className="mx-auto flex flex-row gap-3 my-4 text-[#828181]">
             <Link
-              href="https://farcaster.xyz/paragraph"
+              href="https://x.com/commasdotart"
               target="_blank"
               rel="noreferrer"
               className="hover:text-white transition-all"
@@ -701,7 +662,7 @@ export default function BlogPage() {
               <LayoutGrid className="w-5 h-5" />
             </Link>
             <Link
-              href="https://x.com/paragraph_xyz"
+              href="https://x.com/commasdotart"
               target="_blank"
               rel="noreferrer"
               className="hover:text-white transition-all"
@@ -709,11 +670,11 @@ export default function BlogPage() {
               <Twitter className="w-5 h-5" />
             </Link>
             <Link
-              href="https://paragraph.com/@blog"
+              href="https://commas.art"
               target="_blank"
               rel="noreferrer"
               className="hover:text-white transition-all"
-              aria-label="Paragraph Blog"
+              aria-label="commas"
             >
               <svg
                 className="h-5 w-5 transition-all"
@@ -724,7 +685,7 @@ export default function BlogPage() {
                 xmlns="http://www.w3.org/2000/svg"
                 role="img"
               >
-                <title>Paragraph</title>
+                <title>commas</title>
                 <path
                   d="M6 0V76.1345H81"
                   stroke="currentColor"
@@ -749,11 +710,11 @@ export default function BlogPage() {
 
           <p className="text-sm text-center font-semibold text-[#828181] mb-2 flex items-center justify-center gap-1">
             <Copyright className="h-3.5 w-3.5" />
-            2025 Paragraph Technologies Inc
+            2026 commas
           </p>
 
           <nav
-            aria-label="Discover Paragraph content"
+            aria-label="Discover commas content"
             className="text-xs text-center text-[#cccccc] mb-4 flex flex-row flex-nowrap gap-4 justify-center"
           >
             <Link
@@ -769,7 +730,7 @@ export default function BlogPage() {
               Trending
             </Link>
             <Link
-              href="https://paragraph.com/privacy"
+              href="https://commas.art"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
@@ -777,7 +738,7 @@ export default function BlogPage() {
               Privacy
             </Link>
             <Link
-              href="https://paragraph.com/terms-of-use"
+              href="https://commas.art"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
@@ -785,7 +746,7 @@ export default function BlogPage() {
               Terms
             </Link>
             <Link
-              href="https://paragraph.com/home"
+              href="https://commas.art"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
