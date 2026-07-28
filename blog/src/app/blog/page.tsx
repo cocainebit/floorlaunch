@@ -1,13 +1,11 @@
 "use client";
 
 import {
-  BarChart2,
   Copyright,
   ExternalLink,
   Home,
   LayoutGrid,
   type LucideIcon,
-  Mail,
   MessageCircle,
   PenLine,
   Search,
@@ -259,8 +257,6 @@ export default function BlogPage() {
         <SidebarIcon icon={Home} />
         <SidebarIcon icon={Search} />
         <SidebarIcon icon={PenLine} active />
-        <SidebarIcon icon={BarChart2} />
-        <SidebarIcon icon={Mail} />
       </aside>
 
       {/* Main Content */}
