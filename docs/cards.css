@@ -310,3 +310,21 @@ div.gap-4:has(.nav-tabs) {
 div.h-full.flex-1:has(.nav-tabs) > div:first-child {
   flex: 0 0 auto !important;
 }
+
+/* dark mode: true white type on the blue-black ground */
+.dark body,
+.dark p,
+.dark li,
+.dark td {
+  color: #FFFFFF;
+}
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark strong {
+  color: #FFFFFF;
+}
+.dark .fl-hero-title {
+  color: #FFFFFF;
+}
