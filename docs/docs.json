@@ -139,7 +139,7 @@
     }
   },
   "appearance": {
-    "default": "light"
+    "default": "dark"
   },
   "background": {
     "color": {
