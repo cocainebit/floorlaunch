@@ -272,13 +272,22 @@ th {
 
 /* ---- header surgery: Resend placement ---- */
 
-/* icon-only copy button */
+/* logo at 0.8x of Mintlify's default 24px navbar height */
+.nav-logo {
+  height: 19.2px !important;
+}
+
+/* icon-only copy button, height matched to the dropdown toggle (34px)
+   so the two-segment control reads as one even pill */
 #page-context-menu-button span {
   display: none;
 }
 #page-context-menu-button {
-  padding-left: 0.55rem;
-  padding-right: 0.55rem;
+  height: 34px;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* tabs sit left, next to the logo, instead of right: grow the header
