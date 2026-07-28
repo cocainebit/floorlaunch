@@ -6,7 +6,8 @@ description: "Automatic and manual freezes that stop a bad price from becoming a
 The oracle index is the single input every risk decision depends on: collateral checks, funding, liquidations. The circuit breaker exists so that one bad print, whether from manipulation, a source outage, or a fat-fingered push from the price feed service (the relayer), halts the market instead of flowing into those decisions.
 
 <Frame caption="The index defense stack, layered by time scale.">
-  <img src="/images/protocol/12-defense-stack.png" alt="The index defense stack, layered by time scale." noZoom />
+  <img className="hidden dark:block" src="/images/protocol/12-defense-stack.png" alt="The index defense stack, layered by time scale." noZoom />
+  <img className="block dark:hidden" src="/images/protocol/12-defense-stack-light.png" alt="The index defense stack, layered by time scale." noZoom />
 </Frame>
 
 ## Automatic: deviation freeze
