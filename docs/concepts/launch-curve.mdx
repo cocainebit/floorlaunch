@@ -19,7 +19,8 @@ opening price per base unit = curve_virtual_sol / curve_virtual_tokens
 ```
 
 <Frame caption="Market cap is quadratic in the raise; half the float sells in the first 25 SOL.">
-  <img src="/images/economics/01-curve-phase.png" alt="Market cap is quadratic in the raise; half the float sells in the first 25 SOL." noZoom />
+  <img className="hidden dark:block" src="/images/economics/01-curve-phase.png" alt="Market cap is quadratic in the raise; half the float sells in the first 25 SOL." noZoom />
+  <img className="block dark:hidden" src="/images/economics/01-curve-phase-light.png" alt="Market cap is quadratic in the raise; half the float sells in the first 25 SOL." noZoom />
 </Frame>
 
 Every launch prices identically, like any launchpad: the underlying collectible's price never touches the curve. The convention puts the **full 1B token supply** on the curve (`curve_virtual_tokens = 1e15` base units) against **25 SOL** of virtual SOL (`curve_virtual_sol`), so every token opens at 0.025 SOL per unit (1M tokens), a **25 SOL market cap**. With the 100 SOL graduation target, constant-product algebra sells 800M tokens over the raise and multiplies the price by exactly `((v_sol + raise) / v_sol)^2 = 25`: the curve closes at **0.625 SOL per unit**, about a 625 SOL market cap. The collectible enters only through the launch-scaled [Price Index](/concepts/price-index): at launch one unit is *defined* as worth 0.625 SOL, the curve's closing price, so the AMM seeds at exactly zero premium to the index (see [The Synth Token](/concepts/synth-token) for the unit math).
@@ -75,5 +76,6 @@ The curve runs until `curve_sol_raised` reaches `graduation_target_sol`, at whic
 - Parameters: `curve_virtual_sol`, `curve_virtual_tokens`, `curve_fee_bps`, `graduation_target_sol`, see [Parameters](/concepts/parameters)
 
 <Frame caption="The same 1 SOL buy at every point on the curve: early SOL buys about 20x the tokens and moves price about 5x harder.">
-  <img src="/images/economics/02-front-loading.png" alt="The same 1 SOL buy at every point on the curve: early SOL buys about 20x the tokens and moves price about 5x harder." noZoom />
+  <img className="hidden dark:block" src="/images/economics/02-front-loading.png" alt="The same 1 SOL buy at every point on the curve: early SOL buys about 20x the tokens and moves price about 5x harder." noZoom />
+  <img className="block dark:hidden" src="/images/economics/02-front-loading-light.png" alt="The same 1 SOL buy at every point on the curve: early SOL buys about 20x the tokens and moves price about 5x harder." noZoom />
 </Frame>
