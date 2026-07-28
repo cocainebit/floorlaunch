@@ -1,13 +1,13 @@
 ---
 title: "FAQ"
-description: "Common questions about floorlaunch markets, the peg, the oracle, and risk."
+description: "Common questions about commas markets, the peg, the oracle, and risk."
 ---
 
 <AccordionGroup>
 
 <Accordion title="What is my token actually tied to?">
 A real collectible's price. Every market is launched against one underlying:
-a specific graded card (for example, a PSA 10 Umbreon VMAX) or an NFT
+a specific graded card (for example, a [PSA](https://www.psacard.com) 10 Umbreon VMAX) or an NFT
 collection's floor (for example, Mad Lads). One million tokens represent one
 unit of that collectible, and the token's price is pulled toward the
 collectible's live market price by [funding](/concepts/funding) and hedger
@@ -29,7 +29,7 @@ one, but they are exchange inventory, not backing the supply depends on.
 </Accordion>
 
 <Accordion title="Is the supply fixed? Can the team mint more?">
-No one can mint more, ever. Every floorlaunch token is a fixed-supply SPL
+No one can mint more, ever. Every ***commas*** token is a fixed-supply SPL
 token: on the internal venue the entire allocation (curve supply, the hedging
 reserve, and the item-swap reserve) is preminted at market creation and the
 mint authority is revoked in the same transaction, which is what wallets and
@@ -98,7 +98,7 @@ print or when the admin freezes manually. The admin reviews and unfreezes.
 Balances and positions are untouched while frozen.
 </Accordion>
 
-<Accordion title="Is there a floorlaunch token?">
+<Accordion title="Is there a ***commas*** token?">
 No. There is no protocol token, no points program, and nothing of the sort
 planned in this documentation. Each market's synth token is the only token the
 program creates.
@@ -114,13 +114,13 @@ the pool.
 There are no fees on opening or closing shorts beyond normal trading.
 </Accordion>
 
-<Accordion title="What chains does floorlaunch run on?">
+<Accordion title="What chains does ***commas*** run on?">
 Solana only. The program is written in Anchor, and the design leans on
-Solana-native infrastructure (SPL tokens, Pyth for the SOL/USD leg,
+Solana-native infrastructure (SPL tokens, [Pyth](https://pyth.network) for the SOL/USD leg,
 Solana-native marketplaces and launch infrastructure).
 </Accordion>
 
-<Accordion title="Is floorlaunch audited? Is it live?">
+<Accordion title="Is ***commas*** audited? Is it live?">
 No and no. The program passes its integration test suite locally, but it is
 pre-audit and not deployed to devnet or mainnet. Nothing in these docs is an
 invitation to deposit funds anywhere. Audits precede mainnet; see the
@@ -130,7 +130,7 @@ invitation to deposit funds anywhere. Audits precede mainnet; see the
 <Accordion title="How is this different from fractionalized NFTs or a 404 token?">
 Fractionalization and 404-style hybrids custody the underlying and peg by
 two-way redemption, which makes them trackers with vault problems (adverse
-selection, custody risk, reflexive unwinding). floorlaunch references the
+selection, custody risk, reflexive unwinding). ***commas*** references the
 underlying's price without holding it, and accepts a softer peg in exchange
 for eliminating custody entirely. See [How it works](/how-it-works).
 </Accordion>

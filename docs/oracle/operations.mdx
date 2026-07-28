@@ -37,7 +37,7 @@ the parameter clamps for the exact blast radius.
 ## Reliability
 
 - **Per-source retry with backoff**: each data source (card APIs, marketplace APIs,
-  Pyth) is fetched independently with retries. One source failing degrades the
+  [Pyth](https://pyth.network)) is fetched independently with retries. One source failing degrades the
   estimate to the remaining sources; if too few survive to pass the gates, the
   relayer holds rather than pushes.
 - **Idempotent cycles**: a crashed cycle is safe to rerun. The program's

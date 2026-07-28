@@ -5,13 +5,13 @@ description: "How the relayer builds a manipulation-resistant index for a graded
 
 <Note>
 **Current implementation status** (`relayer/src/sources/card.ts`): three sources.
-`pokemontcg` is **live and keyless**: the TCGplayer market price for a RAW (ungraded)
+`pokemontcg` is **live and keyless**: the [TCGplayer](https://www.tcgplayer.com) market price for a RAW (ungraded)
 card variant via pokemontcg.io, refreshed daily, with retry-and-backoff and a low/high
-sanity band (set `POKEMONTCG_API_KEY` to raise rate limits). A PSA-graded market must
+sanity band (set `POKEMONTCG_API_KEY` to raise rate limits). A [PSA](https://www.psacard.com)-graded market must
 never use this source; raw and graded are different assets. `manual` is an
 operator-attested USD price for markets whose real source is pending. `gradedApi` is
 the shaped client for subscription graded-price APIs and refuses to run without
-`TCG_GRADED_API_KEY`. All three convert through a live Pyth SOL/USD read. The
+`TCG_GRADED_API_KEY`. All three convert through a live [Pyth](https://pyth.network) SOL/USD read. The
 multi-source graded estimator described below is the production design those keys
 unlock. Verified live 2026-07-24: swsh7-215 RAW ($2,137.76) pushed on chain within 2
 bps of source. Graded cards are the flagship asset class; see
@@ -30,10 +30,10 @@ The estimator pools four independent source types:
 
 | Source | Role |
 | --- | --- |
-| Aggregator card-price APIs (per card, per grade, computed from eBay and TCGplayer data) | Workhorse estimate, refreshed roughly daily |
+| Aggregator card-price APIs (per card, per grade, computed from [eBay](https://www.ebay.com) and TCGplayer data) | Workhorse estimate, refreshed roughly daily |
 | eBay sold listings for the exact card and grade | Ground-truth sale prints the aggregators compress |
-| Collector Crypt sales of the tokenized card, plus their instant-buyback quote | On-chain sale prints, and a **capitalized bid-side anchor**: the buyback offer (roughly 85 to 93 percent of modeled value) is money the platform will actually pay, so the implied price is expensive to fake |
-| Courtyard sales of the same card | Cross-chain sanity check |
+| [Collector Crypt](https://collectorcrypt.com) sales of the tokenized card, plus their instant-buyback quote | On-chain sale prints, and a **capitalized bid-side anchor**: the buyback offer (roughly 85 to 93 percent of modeled value) is money the platform will actually pay, so the implied price is expensive to fake |
+| [Courtyard](https://courtyard.io) sales of the same card | Cross-chain sanity check |
 
 ## Estimator
 

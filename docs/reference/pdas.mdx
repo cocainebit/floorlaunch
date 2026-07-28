@@ -1,6 +1,6 @@
 ---
 title: "Program ID & PDAs"
-description: "The floorlaunch program address and every program-derived address it owns"
+description: "The commas program address and every program-derived address it owns"
 ---
 
 ## Program ID
@@ -18,15 +18,15 @@ Every account the program owns is a PDA. There is exactly one `Global` per deplo
 
 | Account | Seeds | Owner program | Notes |
 | --- | --- | --- | --- |
-| `Global` | `["global"]` | floorlaunch | Singleton config: admin, oracle authority, default params |
-| `Market` | `["market", collection]` | floorlaunch | One per underlying; `collection` is the 32-byte underlying identifier |
+| `Global` | `["global"]` | ***commas*** | Singleton config: admin, oracle authority, default params |
+| `Market` | `["market", collection]` | ***commas*** | One per underlying; `collection` is the 32-byte underlying identifier |
 | Synth mint | `["mint", market]` | SPL Token | Internal venue only; 6 decimals; the full supply is preminted at `create_market` and the **mint authority is revoked** in the same transaction. External markets use the externally launched (also fixed-supply) mint recorded in `Market.synth_mint` |
 | Pool token account | `["pool", market]` | SPL Token | Internal venue only; holds the preminted curve allocation during Bootstrap, then the AMM-side seed after [graduation](/concepts/graduation) (the unsold excess burns); authority is the `Market` PDA |
 | Treasury token account | `["treasury", market]` | SPL Token | Authority is the `Market` PDA. Holds the CDP hedging reserve on both venues ([`open_short`](/reference/instructions#open_short) draws from it, repay/liquidate return to it, and its balance is the physical open-interest ceiling). Preminted to `max_open_interest` on internal markets; funded by SPL transfer at listing on external markets |
 | Item reserve token account | `["items", market]` | SPL Token | Authority is the `Market` PDA. Holds the preminted allocation backing [item swaps](/concepts/synth-token#item-swaps): [`deposit_item`](/reference/instructions#deposit_item) pays out of it, [`withdraw_item`](/reference/instructions#withdraw_item) pays back into it. Sized by `params.item_reserve` at creation (zero disables the facility) |
 | SOL vault | `["vault", market]` | System | Plain system account; see below |
-| `ShortPosition` | `["short", market, owner]` | floorlaunch | One per (market, wallet) pair |
-| `ItemRegistration` | `["item", market, item_mint]` | floorlaunch | One per registered copy; created by [`register_item`](/reference/instructions#register_item) |
+| `ShortPosition` | `["short", market, owner]` | ***commas*** | One per (market, wallet) pair |
+| `ItemRegistration` | `["item", market, item_mint]` | ***commas*** | One per registered copy; created by [`register_item`](/reference/instructions#register_item) |
 | Item escrow | ATA(market, item_mint) | SPL Token | The market's associated token account for a registered item mint; holds deposited copies. Not a seeds PDA, but its authority is the `Market` PDA, so only the program can move copies out |
 | Identity escrow | `["escrow", id_hash]` | System | See below |
 
@@ -51,7 +51,7 @@ Outbound transfers are signed by the vault PDA with seeds `["vault", market, vau
 
 ## Identity escrows
 
-When a launch names a fee receiver by social identity (an X handle, a YouTube channel, an Elite Fourum user) instead of a wallet, that creator's fee share accumulates in a keyless system-account PDA seeded by `["escrow", sha256("platform:handle")]`. No key for the account exists anywhere, so nobody (including the team) can spend it while unverified. After the off-chain nonce-in-bio identity proof, the admin signs [`release_escrow`](/reference/instructions#release_escrow) and the program pays the balance to the wallet the verified creator chose, emitting [`EscrowReleased`](/reference/events#escrowreleased).
+When a launch names a fee receiver by social identity (an X handle, a YouTube channel, an [Elite Fourum](https://elitefourum.com) user) instead of a wallet, that creator's fee share accumulates in a keyless system-account PDA seeded by `["escrow", sha256("platform:handle")]`. No key for the account exists anywhere, so nobody (including the team) can spend it while unverified. After the off-chain nonce-in-bio identity proof, the admin signs [`release_escrow`](/reference/instructions#release_escrow) and the program pays the balance to the wallet the verified creator chose, emitting [`EscrowReleased`](/reference/events#escrowreleased).
 
 ## Deriving addresses in TypeScript
 

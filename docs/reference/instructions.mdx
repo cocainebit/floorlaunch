@@ -1,6 +1,6 @@
 ---
 title: "Instructions"
-description: "Complete reference for all 25 floorlaunch instructions: arguments, accounts, guards, errors, and events"
+description: "Complete reference for all 25 commas instructions: arguments, accounts, guards, errors, and events"
 ---
 
 Method names are shown in Rust snake_case; the Anchor TypeScript client exposes them in camelCase (`curve_buy` becomes `curveBuy`).
@@ -72,7 +72,7 @@ Guards: `curve_virtual_sol > 0`, `curve_virtual_tokens > 0`, and `units_per_item
 
 ### create_external_market
 
-Attaches a market to a token that launched on an **external venue** (Meteora DBC into a DAMM pool). The mint already exists and its supply is fixed, so there is no curve phase: the market is created directly `Live` with `venue = External`, and CDP supply moves through the treasury reserve, exactly as on the internal venue. The treasury must be funded with reserve tokens (a plain SPL transfer to the treasury PDA) before shorts can open; its balance is the market's physical open-interest ceiling. The mark price is oracle-pushed via [`push_mark`](#push_mark).
+Attaches a market to a token that launched on an **external venue** ([Meteora](https://www.meteora.ag) DBC into a DAMM pool). The mint already exists and its supply is fixed, so there is no curve phase: the market is created directly `Live` with `venue = External`, and CDP supply moves through the treasury reserve, exactly as on the internal venue. The treasury must be funded with reserve tokens (a plain SPL transfer to the treasury PDA) before shorts can open; its balance is the market's physical open-interest ceiling. The mark price is oracle-pushed via [`push_mark`](#push_mark).
 
 | Arg | Type | Description |
 | --- | --- | --- |
@@ -144,7 +144,7 @@ Guards: `amount > 0 && amount <= fee_lamports`, else `InsufficientVaultFunds`. E
 
 ### release_escrow
 
-Pays out an [identity fee escrow](/reference/pdas#identity-escrows): a keyless system-account PDA that accumulates a creator's fee share while their social identity (X, YouTube, Elite Fourum) is unverified. After the off-chain nonce-in-bio proof, the admin signs this instruction to sweep the balance to the verified wallet. The escrow PDA itself never has a private key.
+Pays out an [identity fee escrow](/reference/pdas#identity-escrows): a keyless system-account PDA that accumulates a creator's fee share while their social identity (X, YouTube, [Elite Fourum](https://elitefourum.com)) is unverified. After the off-chain nonce-in-bio proof, the admin signs this instruction to sweep the balance to the verified wallet. The escrow PDA itself never has a private key.
 
 | Arg | Type | Description |
 | --- | --- | --- |

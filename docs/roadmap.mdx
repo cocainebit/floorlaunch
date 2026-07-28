@@ -1,6 +1,6 @@
 ---
 title: "Roadmap"
-description: "Where floorlaunch is today and what is planned, in order."
+description: "Where commas is today and what is planned, in order."
 ---
 
 ## Current status (v1)
@@ -16,9 +16,9 @@ and an external-venue market running off a treasury reserve with an
 oracle-pushed mark.
 
 The v1 price feed (the [relayer](/oracle/architecture)) is built (TypeScript,
-`relayer/` in the repo): Magic Eden listing-ladder estimation for NFT floors, a live keyless
-TCGplayer source for raw cards plus config-priced graded mode with live Pyth
-SOL/USD conversion, a Meteora DAMM mark source for external venues,
+`relayer/` in the repo): [Magic Eden](https://magiceden.io) listing-ladder estimation for NFT floors, a live keyless
+[TCGplayer](https://www.tcgplayer.com) source for raw cards plus config-priced graded mode with live [Pyth](https://pyth.network)
+SOL/USD conversion, a [Meteora](https://www.meteora.ag) DAMM mark source for external venues,
 disagreement gates, and YAML per-market config. On 2026-07-23 the full stack
 ran end to end on a local validator against live Mad Lads data: the relayer
 pushed the real index, then the market ran curve launch, graduation, AMM
@@ -33,7 +33,7 @@ oracle pushes refused while frozen, vault rent buffer) are fixed and covered
 above.
 
 Not yet done: graded card-price API sources (subscription keys), devnet and
-mainnet deployments, and any independent audit. floorlaunch is not deployed
+mainnet deployments, and any independent audit. ***commas*** is not deployed
 anywhere yet.
 
 ## Planned work
@@ -51,7 +51,7 @@ whose balance is the physical open-interest cap) and an **oracle-pushed mark**
 from Meteora's public pool API. The internal curve and AMM remain the default
 venue.
 
-Remaining on this path: a floorlaunch-branded DBC config key so launches run
+Remaining on this path: a ***commas***-branded DBC config key so launches run
 through Meteora end to end from our UI (today an external launch happens on
 Meteora's side first, then the market attaches).
 
@@ -59,10 +59,10 @@ Meteora's side first, then the market attaches).
 
 The relayer's raw-card source (TCGplayer via pokemontcg.io) is live. Graded
 production means wiring the full [oracle pipeline](/oracle/card-pipeline):
-subscription aggregator APIs plus eBay sold prints plus tokenized-venue
+subscription aggregator APIs plus [eBay](https://www.ebay.com) sold prints plus tokenized-venue
 cross-checks, MAD outlier rejection, sanity bands from capitalized bids,
 cross-source agreement gates, and paging alerts. The NFT side additionally
-gains a Tensor bid leg (see [NFT pipeline](/oracle/nft-pipeline)) once API
+gains a [Tensor](https://www.tensor.trade) bid leg (see [NFT pipeline](/oracle/nft-pipeline)) once API
 keys are provisioned.
 
 ### On-chain staleness guard (shipped)

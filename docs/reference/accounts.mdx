@@ -66,7 +66,7 @@ One per underlying at `["market", collection]`.
 | `collection` | `Pubkey` | Opaque underlying identifier (seed of this PDA) |
 | `synth_mint` | `Pubkey` | The market's synth SPL mint (program PDA on the internal venue, the externally launched mint on the external venue). Mint authority is `None` in both cases: internal mints are revoked at `create_market` after the premint, so every synth is fixed-supply |
 | `status` | `MarketStatus` | `Bootstrap` (curve phase) or `Live` (post-graduation; external markets start `Live`) |
-| `venue` | `Venue` | `Internal` (program curve + AMM; fixed supply preminted at creation, mint revoked) or `External` (Meteora DBC/DAMM launch; mark via [`push_mark`](/reference/instructions#push_mark)). CDP supply flows through the treasury reserve on both |
+| `venue` | `Venue` | `Internal` (program curve + AMM; fixed supply preminted at creation, mint revoked) or `External` ([Meteora](https://www.meteora.ag) DBC/DAMM launch; mark via [`push_mark`](/reference/instructions#push_mark)). CDP supply flows through the treasury reserve on both |
 | `frozen` | `bool` | Circuit-breaker flag; independent of `status` so a freeze preserves the phase |
 | `params` | `MarketParams` | Active parameters (copied or overridden at creation) |
 

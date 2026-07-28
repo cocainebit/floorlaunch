@@ -6,12 +6,12 @@ description: "How the off-chain price relayer computes and pushes the floor inde
 <Note>
 The v1 relayer is **built** and lives at `relayer/` in the repository (TypeScript, run
 with `npm run once` for a single cycle or `npm start` for the loop). The full stack was
-exercised end to end on a local validator against live Mad Lads data from Magic Eden
+exercised end to end on a local validator against live Mad Lads data from [Magic Eden](https://magiceden.io)
 on 2026-07-23: the relayer estimated and pushed the index, then the market ran curve
 launch, graduation, AMM trading, a hedger short, and funding accrual against it. On
 2026-07-24 the card pipeline did the same live: Umbreon VMAX Alt Art (swsh7-215, RAW,
-$2,137.76 on TCGplayer) landed on chain at 28.32 SOL through a live Pyth SOL/USD read,
-within 2 bps of source, and the Meteora DAMM mark source was verified against a live
+$2,137.76 on [TCGplayer](https://www.tcgplayer.com)) landed on chain at 28.32 SOL through a live [Pyth](https://pyth.network) SOL/USD read,
+within 2 bps of source, and the [Meteora](https://www.meteora.ag) DAMM mark source was verified against a live
 SOL-paired pool. Source coverage still grows over time; per-pipeline status is noted
 on the [card pipeline](/oracle/card-pipeline) and [NFT pipeline](/oracle/nft-pipeline)
 pages.
@@ -19,11 +19,11 @@ pages.
 
 ## Overview
 
-Every floorlaunch market prices its synthetic against an **index**: the current market
+Every ***commas*** market prices its synthetic against an **index**: the current market
 value of the collectible (a graded card, a basket of cards, or an NFT collection floor),
 expressed in lamports per whole unit. That index does not exist on any chain. The
-relayer is the market's price feed: a service floorlaunch runs that reads the
-collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector
+relayer is the market's price feed: a service ***commas*** runs that reads the
+collectible's real prices from marketplaces ([eBay](https://www.ebay.com) and TCGplayer aggregates, Collector
 Crypt, Magic Eden), filters manipulation, and writes the result on chain with a
 signature the program trusts.
 

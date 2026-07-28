@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "floorlaunch",
-  "description": "Launchpad for funding-pegged synthetic tokens tracking collectible markets: graded trading cards and NFT collection floors. No custody, no vault.",
+  "name": "commas",
+  "description": "commas is a launchpad for funding-pegged synthetic tokens that track collectible markets: graded trading cards and NFT collection floors. commas.art",
   "theme": "almond",
   "icons": {
     "library": "lucide"

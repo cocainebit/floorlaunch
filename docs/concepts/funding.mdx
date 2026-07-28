@@ -3,7 +3,7 @@ title: "Funding"
 description: "The clamped funding rate that tethers the synth's market price to the oracle index."
 ---
 
-floorlaunch has no redemption of synth for the underlying asset. The link between the token's market price and the [price index](/concepts/price-index) is economic: a funding rate continuously transfers value between the two sides of the market until arbitrage pulls the prices back together. This is the same mechanism that pegs perpetual futures, applied to a token.
+***commas*** has no redemption of synth for the underlying asset. The link between the token's market price and the [price index](/concepts/price-index) is economic: a funding rate continuously transfers value between the two sides of the market until arbitrage pulls the prices back together. This is the same mechanism that pegs perpetual futures, applied to a token.
 
 ## The rate
 
@@ -55,4 +55,4 @@ Because there is no oracle-priced redemption, a manipulated index print cannot d
 max damage per day <= total_open_interest * max_funding_bps_per_day / 10_000
 ```
 
-A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short debt is bounded by the finite [hedge reserve](/concepts/parameters). The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason floorlaunch can reference thin external markets at all.
+A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short debt is bounded by the finite [hedge reserve](/concepts/parameters). The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason ***commas*** can reference thin external markets at all.

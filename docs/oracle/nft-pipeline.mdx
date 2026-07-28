@@ -5,8 +5,8 @@ description: "How the relayer builds a floor index for an NFT collection market 
 
 <Note>
 The v1 pipeline described here is **built** (at `relayer/src/sources/magiceden.ts`,
-using Magic Eden's public API). It was exercised end to end against live Mad Lads
-data. The bid-side leg is planned and needs a Tensor API key. NFT collection floors
+using [Magic Eden](https://magiceden.io)'s public API). It was exercised end to end against live Mad Lads
+data. The bid-side leg is planned and needs a [Tensor](https://www.tensor.trade) API key. NFT collection floors
 are the secondary asset class; see [Asset Classes](/asset-classes).
 </Note>
 
@@ -61,7 +61,7 @@ disagreement detection.
 
 ## Conversion
 
-NFT floors are already SOL-denominated, so no Pyth SOL/USD leg is needed. The estimate
+NFT floors are already SOL-denominated, so no [Pyth](https://pyth.network) SOL/USD leg is needed. The estimate
 converts directly to lamports per whole NFT and is pushed via
 [`push_index`](/reference/instructions#push_index).
 

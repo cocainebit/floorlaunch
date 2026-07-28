@@ -1,13 +1,13 @@
 ---
 title: "How it works"
-description: "The life of a floorlaunch market: listing, oracle index, bonding curve launch, graduation, and the live phase with AMM trading, CDP shorts, funding, and liquidations."
+description: "The life of a commas market: listing, oracle index, bonding curve launch, graduation, and the live phase with AMM trading, CDP shorts, funding, and liquidations."
 ---
 
-Every floorlaunch market moves through the same lifecycle. This page walks it end to end; each stage links to a concept page with the exact math and parameters.
+Every ***commas*** market moves through the same lifecycle. This page walks it end to end; each stage links to a concept page with the exact math and parameters.
 
 ## What you are actually trading
 
-Every floorlaunch token is priced against a collectible, not against SOL or a dollar peg. One million tokens represent one unit of that collectible: one PSA 10 card, or one floor NFT of a collection. A worked example:
+Every ***commas*** token is priced against a collectible, not against SOL or a dollar peg. One million tokens represent one unit of that collectible: one [PSA](https://www.psacard.com) 10 card, or one floor NFT of a collection. A worked example:
 
 - A market is listed for PSA 10 Umbreon VMAX Alt Art. The card trades around $2,100 in the real world, so one full unit of tokens is worth about $2,100 of exposure, and each individual token about $0.0021.
 - The card's real price doubles over the next year. The token's index doubles with it, and funding plus hedger arbitrage drag the token's market price along. Your exposure doubled without you ever buying, grading, storing, or insuring a card.
@@ -21,7 +21,7 @@ A market is created for one collectible underlying: a specific card+grade (for e
 
 ## 2. The index goes live
 
-The market's price feed goes live: a signed relayer service that reads the collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector Crypt, Magic Eden), filters manipulation, and writes the result on chain as index observations, the price of one unit of the collectible in lamports. On chain, pushes are rate-limited, smoothed into a time-weighted EMA (the index TWAP), and checked against a [circuit breaker](/concepts/circuit-breaker) that freezes the market if an observation deviates too far from the TWAP. How the price is estimated off chain is covered in [Oracle & Relayer](/oracle/architecture).
+The market's price feed goes live: a signed relayer service that reads the collectible's real prices from marketplaces ([eBay](https://www.ebay.com) and [TCGplayer](https://www.tcgplayer.com) aggregates, [Collector Crypt](https://collectorcrypt.com), [Magic Eden](https://magiceden.io)), filters manipulation, and writes the result on chain as index observations, the price of one unit of the collectible in lamports. On chain, pushes are rate-limited, smoothed into a time-weighted EMA (the index TWAP), and checked against a [circuit breaker](/concepts/circuit-breaker) that freezes the market if an observation deviates too far from the TWAP. How the price is estimated off chain is covered in [Oracle & Relayer](/oracle/architecture).
 
 <Note>
 Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [staleness guard](/concepts/price-index#staleness-guard), and the off-chain price feed (the [relayer](/oracle/architecture)) that estimates and pushes prices (production card-price API sources are still pending).
@@ -36,7 +36,7 @@ Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [stalen
 The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads, and every launch is priced identically: 1B token supply, a **25 SOL market cap at open**, and migration once the curve has raised **100 SOL**, so the AMM pool starts with 100 SOL of real liquidity inside it (about a 625 SOL market cap at the close). The collectible's price never touches the curve; the oracle index is launch-scaled so premium and funding stay meaningful. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
 
 <Note>
-External-venue markets skip stages 3 and 4 entirely: a token that launched on Meteora DBC attaches via `create_external_market`, starts directly in the live phase, and runs its CDP off a treasury reserve with an oracle-pushed mark. See [Venues](/concepts/amm#venues).
+External-venue markets skip stages 3 and 4 entirely: a token that launched on [Meteora](https://www.meteora.ag) DBC attaches via `create_external_market`, starts directly in the live phase, and runs its CDP off a treasury reserve with an oracle-pushed mark. See [Venues](/concepts/amm#venues).
 </Note>
 
 ## 4. Graduation

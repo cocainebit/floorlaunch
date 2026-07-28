@@ -79,8 +79,8 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">
-          floor<span className="brand-accent">launch</span>
+        <div className="brand" style={{ fontStyle: "italic", fontWeight: 700 }}>
+          commas
         </div>
         <nav className="nav">
           <span

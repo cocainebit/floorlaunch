@@ -1,11 +1,11 @@
 ---
 title: "Glossary"
-description: "Definitions of every term used across the floorlaunch protocol and documentation."
+description: "Definitions of every term used across the commas protocol and documentation."
 ---
 
 **Synth token.** The SPL token issued by a market. Its price is tethered to the index by arbitrage and funding. One market has exactly one synth mint with 6 decimals and fixed supply: on internal-venue markets the full allocation is preminted at creation and the mint authority revoked in the same transaction, while external-venue markets attach to an externally launched fixed-supply mint and run their CDP off a treasury reserve (see [Venues](/concepts/amm#venues)).
 
-**Underlying.** The collectible a market is launched against: a specific graded card (a PSA 10 Umbreon VMAX), a weighted basket of cards, or an NFT collection's floor (Mad Lads). Never SOL, never a stablecoin: SOL is only the currency traded with and the collateral hedgers post.
+**Underlying.** The collectible a market is launched against: a specific graded card (a [PSA](https://www.psacard.com) 10 Umbreon VMAX), a weighted basket of cards, or an NFT collection's floor (Mad Lads). Never SOL, never a stablecoin: SOL is only the currency traded with and the collateral hedgers post.
 
 **Unit of underlying.** What one million tokens represent: one graded card at a specific grade, one basket share, or one floor NFT of a collection.
 
@@ -33,9 +33,9 @@ description: "Definitions of every term used across the floorlaunch protocol and
 
 **Hedge reserve.** The preminted allocation of the fixed supply that hedgers draw against SOL collateral; when the reserve is empty, the hedging facility is full. Its size is the `max_open_interest` parameter (in derivatives language, an open interest cap on total short debt), set against the depth of the collectible's real market so the synth can never become the price setter for its own underlying.
 
-**Program-derived address (PDA).** A Solana account whose address is derived from a program and fixed seeds rather than from a private key. No key for it exists, so only the owning program can sign for it: floorlaunch's vaults, treasuries, and market accounts are all PDAs, meaning no human holds a key to any of them.
+**Program-derived address (PDA).** A Solana account whose address is derived from a program and fixed seeds rather than from a private key. No key for it exists, so only the owning program can sign for it: ***commas***'s vaults, treasuries, and market accounts are all PDAs, meaning no human holds a key to any of them.
 
-**Relayer (price feed).** The signed off-chain service floorlaunch runs that reads a collectible's real prices from marketplaces (eBay and TCGplayer aggregates, Collector Crypt, Magic Eden), filters manipulation, and writes the result on chain with the oracle authority's signature. See [Oracle & Relayer](/oracle/architecture).
+**Relayer (price feed).** The signed off-chain service ***commas*** runs that reads a collectible's real prices from marketplaces ([eBay](https://www.ebay.com) and [TCGplayer](https://www.tcgplayer.com) aggregates, [Collector Crypt](https://collectorcrypt.com), [Magic Eden](https://magiceden.io)), filters manipulation, and writes the result on chain with the oracle authority's signature. See [Oracle & Relayer](/oracle/architecture).
 
 **Bonding curve.** The launch-phase pricing mechanism: a constant-product curve over virtual SOL and virtual token reserves. Buys draw from the preminted curve allocation, sells return to it; supply itself never changes.
 

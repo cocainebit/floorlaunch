@@ -7,7 +7,7 @@ Each market issues one SPL token, the **synth**. It is a completely standard SPL
 
 ## Fixed supply, mint revoked
 
-Every floorlaunch token is a **fixed-supply SPL token with a revoked mint authority**, on both venues.
+Every ***commas*** token is a **fixed-supply SPL token with a revoked mint authority**, on both venues.
 
 On the internal venue:
 
@@ -16,7 +16,7 @@ On the internal venue:
 - Nothing can ever mint again. After creation, tokens only move between accounts, and the one burn in the system (unsold curve allocation at [graduation](/concepts/graduation)) means supply can only shrink.
 - Decimals: 6.
 
-On the external venue the mint is whatever the external launch (Meteora DBC) created, recorded as `Market.synth_mint`; supply is likewise fixed and the program holds no mint authority. See [What backs each tranche](#what-backs-each-tranche) below and [Venues](/concepts/amm#venues).
+On the external venue the mint is whatever the external launch ([Meteora](https://www.meteora.ag) DBC) created, recorded as `Market.synth_mint`; supply is likewise fixed and the program holds no mint authority. See [What backs each tranche](#what-backs-each-tranche) below and [Venues](/concepts/amm#venues).
 
 <Note>
 The hedging facility is a preminted supply allocation, like a locked reserve in any launch's tokenomics. It is not an inflation mechanism: drawing from it moves existing tokens into circulation, and repayments move them back out.
@@ -78,7 +78,7 @@ The tranches are fungible in your wallet; a token does not know which path relea
 
 ## Item swaps
 
-A market's liquidity is not limited to SOL: **the collectible's own supply is liquidity**. When a market is backed by "Pikachu PSA 10", every vaulted copy of that card+grade can enter the market. A holder deposits their on-chain copy (a vaulted-card NFT, or a collection NFT for floor markets) and receives tokens; any token holder can do the reverse and walk away with a copy.
+A market's liquidity is not limited to SOL: **the collectible's own supply is liquidity**. When a market is backed by "Pikachu [PSA](https://www.psacard.com) 10", every vaulted copy of that card+grade can enter the market. A holder deposits their on-chain copy (a vaulted-card NFT, or a collection NFT for floor markets) and receives tokens; any token holder can do the reverse and walk away with a copy.
 
 Both directions are **value-based**, never a fixed per-item token count:
 
