@@ -1,14 +1,15 @@
 /**
  * Wallet layer.
  *
- * Production path: Solana wallet-adapter (Phantom, Solflare) today; the
- * connection UX swaps to Privy once an app ID exists, and only this file
- * changes because everything downstream consumes the useFlWallet()
- * abstraction, never the adapter directly.
+ * Production path: Privy as the connect layer (external Solana wallets like
+ * Phantom/Solflare plus embedded wallets), behind the useFlWallet()
+ * abstraction so nothing downstream consumes Privy directly. Only the app
+ * ID is used here; it is public and read from VITE_PRIVY_APP_ID. The Privy
+ * app secret is server-side only and never belongs in this bundle.
  *
  * Dev path (?dev=1): a localStorage burner keypair with an automatic
- * localnet airdrop, so transaction flows are testable headlessly where no
- * extension wallet exists.
+ * airdrop, so transaction flows are testable headlessly where no extension
+ * wallet exists.
  */
 import {
   createContext,
@@ -18,25 +19,26 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import {
-  ConnectionProvider,
-  WalletProvider,
-  useAnchorWallet,
-  useWallet,
-} from "@solana/wallet-adapter-react";
+  useWallets,
+  useSignTransaction,
+  toSolanaWalletConnectors,
+} from "@privy-io/react-auth/solana";
 import {
-  WalletModalProvider,
-  useWalletModal,
-} from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
-import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+  Connection,
+  Keypair,
+  PublicKey,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
-import "@solana/wallet-adapter-react-ui/styles.css";
 
 export const RPC_URL =
   (import.meta as any).env?.VITE_RPC_URL ?? "https://api.devnet.solana.com";
-export const IS_LOCALNET = RPC_URL.includes("127.0.0.1") || RPC_URL.includes("localhost");
+export const IS_LOCALNET =
+  RPC_URL.includes("127.0.0.1") || RPC_URL.includes("localhost");
+const PRIVY_APP_ID = (import.meta as any).env?.VITE_PRIVY_APP_ID as string;
 const DEV_KEY_STORAGE = "fl-dev-signer";
 
 const isDevMode = () =>
@@ -73,6 +75,41 @@ const FlWalletContext = createContext<FlWallet>({
 
 export const useFlWallet = () => useContext(FlWalletContext);
 
+/**
+ * Adapt Privy's byte-in / byte-out signer into the object-in / object-out
+ * wallet Anchor expects. Privy takes a serialized transaction and returns
+ * a serialized signed transaction, so we serialize on the way in and
+ * rehydrate the same transaction kind on the way out.
+ */
+function makeAnchorWallet(
+  wallet: any,
+  signTransaction: (input: any) => Promise<{ signedTransaction: Uint8Array }>,
+  publicKey: PublicKey
+) {
+  const sign = async (tx: Transaction | VersionedTransaction) => {
+    const legacy = tx instanceof Transaction;
+    const bytes = legacy
+      ? tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+      : tx.serialize();
+    const { signedTransaction } = await signTransaction({
+      transaction: new Uint8Array(bytes),
+      wallet,
+    });
+    return legacy
+      ? Transaction.from(signedTransaction)
+      : VersionedTransaction.deserialize(signedTransaction);
+  };
+  return {
+    publicKey,
+    signTransaction: sign,
+    signAllTransactions: async (txs: (Transaction | VersionedTransaction)[]) => {
+      const out: (Transaction | VersionedTransaction)[] = [];
+      for (const tx of txs) out.push(await sign(tx));
+      return out;
+    },
+  };
+}
+
 function DevBridge({ children }: { children: ReactNode }) {
   const [kp] = useState(devKeypair);
   const [ready, setReady] = useState(false);
@@ -83,7 +120,10 @@ function DevBridge({ children }: { children: ReactNode }) {
       try {
         const bal = await connection.getBalance(kp.publicKey);
         if (bal < 5e9) {
-          const sig = await connection.requestAirdrop(kp.publicKey, IS_LOCALNET ? 100e9 : 5e9);
+          const sig = await connection.requestAirdrop(
+            kp.publicKey,
+            IS_LOCALNET ? 100e9 : 5e9
+          );
           await connection.confirmTransaction(sig);
         }
       } catch {}
@@ -128,50 +168,58 @@ function DevBridge({ children }: { children: ReactNode }) {
   );
 }
 
-function AdapterBridge({ children }: { children: ReactNode }) {
-  const { connected, publicKey, disconnect } = useWallet();
-  const anchorWallet = useAnchorWallet();
-  const { setVisible } = useWalletModal();
+function PrivyBridge({ children }: { children: ReactNode }) {
+  const { ready, authenticated, login, logout } = usePrivy();
+  const { wallets } = useWallets();
+  const { signTransaction } = useSignTransaction();
   const connection = useMemo(() => new Connection(RPC_URL, "confirmed"), []);
 
-  const value = useMemo<FlWallet>(
-    () => ({
+  const wallet = wallets?.[0];
+  const address = wallet?.address ?? null;
+  const connected = ready && authenticated && !!wallet;
+
+  const value = useMemo<FlWallet>(() => {
+    const publicKey = address ? new PublicKey(address) : null;
+    return {
       connected,
-      publicKey: publicKey ?? null,
+      publicKey,
       provider:
-        connected && anchorWallet
-          ? new anchor.AnchorProvider(connection, anchorWallet, {
-              commitment: "confirmed",
-            })
+        connected && wallet && publicKey
+          ? new anchor.AnchorProvider(
+              connection,
+              makeAnchorWallet(wallet, signTransaction, publicKey) as any,
+              { commitment: "confirmed" }
+            )
           : null,
-      connect: () => setVisible(true),
-      disconnect,
-      label:
-        connected && publicKey
-          ? `${publicKey.toBase58().slice(0, 4)}..${publicKey.toBase58().slice(-4)}`
-          : "Connect wallet",
-    }),
-    [connected, publicKey, anchorWallet]
-  );
+      connect: () => login(),
+      disconnect: () => logout(),
+      label: publicKey
+        ? `${publicKey.toBase58().slice(0, 4)}..${publicKey.toBase58().slice(-4)}`
+        : "Connect wallet",
+    };
+  }, [connected, address]);
 
   return (
     <FlWalletContext.Provider value={value}>{children}</FlWalletContext.Provider>
   );
 }
 
+const solanaConnectors = toSolanaWalletConnectors();
+
 export function FlWalletProvider({ children }: { children: ReactNode }) {
   if (isDevMode()) return <DevBridge>{children}</DevBridge>;
-  const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
-    []
-  );
   return (
-    <ConnectionProvider endpoint={RPC_URL}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <AdapterBridge>{children}</AdapterBridge>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <PrivyProvider
+      appId={PRIVY_APP_ID}
+      config={{
+        appearance: { walletChainType: "solana-only" },
+        externalWallets: { solana: { connectors: solanaConnectors } },
+        embeddedWallets: {
+          solana: { createOnLogin: "users-without-wallets" },
+        },
+      }}
+    >
+      <PrivyBridge>{children}</PrivyBridge>
+    </PrivyProvider>
   );
 }
