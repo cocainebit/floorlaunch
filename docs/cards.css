@@ -300,14 +300,6 @@ div:has(> .nav-tabs) {
   margin-right: auto;
 }
 
-/* secondary website button next to the CTA, Resend "Sign In" style */
-nav a[href="https://floorlaunch.xyz"] {
-  border: 1px solid rgba(120, 120, 120, 0.35);
-  border-radius: 10px;
-  padding: 0.4rem 0.85rem;
-  font-weight: 500;
-}
-
 /* the header cluster that holds tabs + buttons must span the full row */
 div.gap-4:has(.nav-tabs) {
   flex: 1 1 0% !important;

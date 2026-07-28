@@ -129,11 +129,6 @@
       }
     ]
   },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/cocainebit/floorlaunch"
-    }
-  },
   "fonts": {
     "heading": {
       "family": "Inter",
@@ -158,12 +153,6 @@
   },
   "favicon": "/favicon.svg",
   "navbar": {
-    "links": [
-      {
-        "label": "floorlaunch.xyz",
-        "href": "https://floorlaunch.xyz"
-      }
-    ],
     "primary": {
       "type": "button",
       "label": "Launch a token",
@@ -177,5 +166,10 @@
       "chatgpt",
       "claude"
     ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/commasdotart"
+    }
   }
 }
