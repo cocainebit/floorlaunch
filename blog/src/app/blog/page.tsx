@@ -1,16 +1,13 @@
 "use client";
 
 import {
-  Copyright,
   ExternalLink,
   Home,
-  LayoutGrid,
   type LucideIcon,
   MessageCircle,
   PenLine,
   Search,
   Share2,
-  Twitter,
 } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useState } from "react";
@@ -18,10 +15,12 @@ import Image from "next/image";
 import Link from "next/link";
 import Comments from "@/components/Comments";
 import SubscribeCard from "@/components/SubscribeCard";
+import SearchModal from "@/components/SearchModal";
 
 export default function BlogPage() {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const [shared, setShared] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const identity = user?.email?.address
     ? user.email.address
     : user?.wallet?.address
@@ -47,21 +46,10 @@ export default function BlogPage() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-transparent z-50 flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="p-2 hover:bg-white/5 rounded-full transition-colors"
-          >
-            <Image
-              src="https://paragraph.com/_next/static/media/logomark_ivory.e208e06b.svg"
-              alt="Logo"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
-          </Link>
           <button
             type="button"
-            className="relative hidden md:flex ml-8 items-center gap-2 h-10 px-4 cursor-pointer text-sm group w-[240px]"
+            onClick={() => setSearchOpen(true)}
+            className="relative hidden md:flex items-center gap-2 h-10 px-4 cursor-pointer text-sm group w-[240px]"
             style={{
               borderRadius: "calc(0.5rem + 8px)",
               color: "hsl(0 0% 80%)",
@@ -255,7 +243,7 @@ export default function BlogPage() {
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-16 flex flex-col items-center justify-center gap-6 z-40 bg-[#141111]">
         <SidebarIcon icon={Home} />
-        <SidebarIcon icon={Search} />
+        <SidebarIcon icon={Search} onClick={() => setSearchOpen((v) => !v)} />
         <SidebarIcon icon={PenLine} active />
       </aside>
 
@@ -547,16 +535,19 @@ export default function BlogPage() {
               the token announcement and the official contract address.
             </p>
 
-            <button
-              type="button"
-              className="text-white font-medium px-6 py-3 rounded-xl transition-colors shadow-lg hover:opacity-90"
+            <Link
+              href="https://launch.commas.art"
+              target="_blank"
+              rel="noreferrer"
+              className="text-white font-medium px-6 py-3 rounded-xl transition-all duration-200 hover:opacity-90"
               style={{
                 backgroundColor: "#3b82f6",
-                boxShadow: "0 10px 15px -3px rgba(59, 130, 246, 0.2)",
+                boxShadow:
+                  "0 0 18px rgba(59, 130, 246, 0.5), 0 8px 20px -6px rgba(59, 130, 246, 0.35)",
               }}
             >
-              Launch a token on commas
-            </button>
+              Launch on Commas
+            </Link>
           </div>
 
           <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full mb-8">
@@ -600,77 +591,9 @@ export default function BlogPage() {
 
         {/* Footer */}
         <footer className="mt-8 w-80 mx-auto flex flex-col justify-center pb-4">
-          <button
-            type="button"
-            className="bg-[#e6ebfe] hover:bg-zinc-50 text-[#6c88f9] font-medium px-4 py-2 rounded-xl transition-colors w-full h-10"
-          >
-            Start writing
-          </button>
-
-          <div className="mx-auto flex flex-row gap-3 my-4 text-[#828181]">
-            <Link
-              href="https://x.com/commasdotart"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-white transition-all"
-            >
-              <LayoutGrid className="w-5 h-5" />
-            </Link>
-            <Link
-              href="https://x.com/commasdotart"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-white transition-all"
-            >
-              <Twitter className="w-5 h-5" />
-            </Link>
-            <Link
-              href="https://commas.art"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-white transition-all"
-              aria-label="commas"
-            >
-              <svg
-                className="h-5 w-5 transition-all"
-                width="30"
-                height="30"
-                viewBox="0 0 81 82"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                role="img"
-              >
-                <title>commas</title>
-                <path
-                  d="M6 0V76.1345H81"
-                  stroke="currentColor"
-                  strokeWidth="10.6585"
-                  strokeMiterlimit="10"
-                />
-                <path
-                  d="M34.4067 5.30176L6 76.1337L76.0722 46.9673"
-                  stroke="currentColor"
-                  strokeWidth="10.6585"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M6 76.129L59.0302 21.5845"
-                  stroke="currentColor"
-                  strokeWidth="10.6585"
-                  strokeMiterlimit="10"
-                />
-              </svg>
-            </Link>
-          </div>
-
-          <p className="text-sm text-center font-semibold text-[#828181] mb-2 flex items-center justify-center gap-1">
-            <Copyright className="h-3.5 w-3.5" />
-            2026 commas
-          </p>
-
           <nav
             aria-label="Discover commas content"
-            className="text-xs text-center text-[#cccccc] mb-4 flex flex-row flex-nowrap gap-4 justify-center"
+            className="text-xs text-center text-[#cccccc] my-4 flex flex-row flex-nowrap gap-4 justify-center"
           >
             <Link
               href="https://commas.art"
@@ -681,7 +604,7 @@ export default function BlogPage() {
               Home
             </Link>
             <Link
-              href="https://commas.art"
+              href="https://launch.commas.art"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
@@ -689,24 +612,25 @@ export default function BlogPage() {
               Launch
             </Link>
             <Link
-              href="https://commas.art/privacy"
+              href="https://commas.art"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
             >
-              Privacy
+              Docs
             </Link>
             <Link
-              href="https://commas.art/terms"
+              href="https://x.com/commasdotart"
               target="_blank"
               rel="noreferrer"
               className="shrink-0 hover:text-white transition-colors"
             >
-              Terms
+              Twitter
             </Link>
           </nav>
         </footer>
       </main>
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
@@ -714,13 +638,16 @@ export default function BlogPage() {
 function SidebarIcon({
   icon: Icon,
   active,
+  onClick,
 }: {
   icon: LucideIcon;
   active?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className={`p-3 rounded-xl transition-all relative group ${active ? "bg-[#e6ebfe] text-[#3e63f8] shadow-[0_0_15px_rgba(255,255,255,0.3)]" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"}`}
     >
       <Icon className="w-5 h-5" />
