@@ -17,6 +17,9 @@ export function Providers({ children }: { children: ReactNode }) {
           theme: "dark",
           accentColor: "#3b82f6",
           walletChainType: "solana-only",
+          // Show Phantom and Solflare directly on the login modal instead
+          // of a single button that opens a wallet chooser.
+          walletList: ["phantom", "solflare", "detected_solana_wallets"],
         },
         // Wallet sign-in for a Solana audience, plus email for everyone else.
         loginMethods: ["wallet", "email"],
