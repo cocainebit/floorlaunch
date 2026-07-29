@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bankr Blog",
-  description: "Bankr blog demo built with Next.js",
+  title: "commas",
+  description:
+    "commas: tokens launched against real collectible markets. Graded cards and NFT floors, priced against the real thing and convertible into it.",
 };
 
 export default function RootLayout({
