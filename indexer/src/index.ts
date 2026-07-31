@@ -12,7 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
-import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports } from "./launch.js";
+import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings } from "./launch.js";
 import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
@@ -25,6 +25,10 @@ import {
 
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
 const WS_RPC = process.env.RPC_WS_URL ?? RPC.replace("http", "ws").replace("8899", "8900");
+// Collector Crypt cards live on mainnet regardless of which cluster the
+// commas program runs on, so card-holdings queries use a DAS-capable mainnet
+// RPC (falls back to the market RPC when unset).
+const DAS_RPC = process.env.DAS_RPC_URL ?? RPC;
 const PROGRAM_ID = process.env.PROGRAM_ID ?? "QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM";
 const IDL_PATH = process.env.IDL_PATH ?? new URL("../../target/idl/floorlaunch.json", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8787);
@@ -235,6 +239,16 @@ async function getSolUsd(): Promise<number> {
 getSolUsd();
 
 app.get("/listings", (_req, res) => res.json(loadListings()));
+
+// Which catalog underlyings does a wallet hold the backing collectible for?
+// Cards resolve against Collector Crypt's Core collection on-chain.
+app.get("/holdings/:owner", async (req, res) => {
+  try {
+    res.json(await cardHoldings(DAS_RPC, req.params.owner));
+  } catch (e: any) {
+    res.status(400).json({ error: e?.message ?? String(e) });
+  }
+});
 
 app.get("/escrows", (_req, res) => res.json(listEscrows()));
 

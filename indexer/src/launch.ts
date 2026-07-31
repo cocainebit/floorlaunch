@@ -16,6 +16,7 @@ import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
+import { resolveSecretKey } from "./keypair.js";
 
 const LAMPORTS = 1e9;
 const BASE_UNITS_PER_NFT = 1_000_000_000_000n;
@@ -104,6 +105,108 @@ export function catalogByIdentifier(identifier: string): any | undefined {
   return catalog.find((c) => c.identifier === identifier);
 }
 
+export function loadCatalog(): any[] {
+  return JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
+}
+
+/**
+ * Collector Crypt's Metaplex Core collection. Every graded card they vault is
+ * a Core asset grouped under this one collection, with the grade metadata
+ * (Year / Set / Serial Number / Grading Company / The Grade) as on-chain
+ * attributes. Our card underlyings were seeded from their marketplace, so a
+ * held card maps back to a catalog entry by rebuilding the same key.
+ */
+export const CC_COLLECTION = "CCryptUfeFSZ3Fgc9FLeKrhLVAP67FSqi1GuVoj9CRac";
+
+const collectionOf = (a: any): string | undefined =>
+  (a.grouping || []).find((g: any) => g.group_key === "collection")?.group_value;
+const attrOf = (a: any, t: string): string | undefined =>
+  (a.content?.metadata?.attributes || []).find((x: any) => x.trait_type === t)?.value;
+
+/** Rebuild the catalog identifier for a Collector Crypt Core card asset. */
+function cardIdentifierOf(a: any): string | null {
+  const y = attrOf(a, "Year");
+  const s = attrOf(a, "Set");
+  const n = attrOf(a, "Serial Number");
+  const gc = attrOf(a, "Grading Company");
+  const g = attrOf(a, "The Grade");
+  if (!y || !s || !n || !gc || !g) return null;
+  return `card:${y}|${s}|#${n}|${gc}|${g}`;
+}
+
+async function assetsByOwner(rpcUrl: string, owner: string): Promise<any[]> {
+  const out: any[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const r: any = await (
+      await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getAssetsByOwner",
+          params: { ownerAddress: owner, page, limit: 1000 },
+        }),
+      })
+    ).json();
+    const items = r?.result?.items ?? [];
+    out.push(...items);
+    if (items.length < 1000) break;
+  }
+  return out;
+}
+
+/**
+ * Which catalog underlyings does `owner` hold the backing collectible for?
+ * Cards resolve against Collector Crypt's Core collection; each match carries
+ * the underlying's market so the UI can deep-link. Requires a DAS-capable RPC
+ * (Helius); returns [] on a plain RPC that lacks getAssetsByOwner.
+ */
+export async function cardHoldings(
+  rpcUrl: string,
+  owner: string
+): Promise<{ owner: string; ccCardsHeld: number; held: any[] }> {
+  const catalog = loadCatalog();
+  const byId = new Map(catalog.map((u) => [u.identifier, u]));
+  const cardIds = new Set(
+    catalog.filter((u) => u.kind === "card").map((u) => u.identifier)
+  );
+  // NFT underlyings resolve directly by their verified on-chain collection.
+  const nftByCollection = new Map<string, any>();
+  for (const u of catalog) {
+    if (u.kind === "nft" && u.verifiedCollection) nftByCollection.set(u.verifiedCollection, u);
+  }
+
+  const assets = await assetsByOwner(rpcUrl, owner);
+  const ccCards = assets.filter((a) => collectionOf(a) === CC_COLLECTION);
+  const counts = new Map<string, number>();
+  for (const a of ccCards) {
+    const id = cardIdentifierOf(a);
+    if (id && cardIds.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  for (const a of assets) {
+    const c = collectionOf(a);
+    if (c && nftByCollection.has(c)) {
+      const id = nftByCollection.get(c).identifier;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  const held = [...counts.entries()].map(([id, copies]) => {
+    const u: any = byId.get(id);
+    return {
+      identifier: id,
+      kind: u.kind,
+      name: u.name,
+      grade: u.grade,
+      category: u.category ?? u._snapshot?.category,
+      market: u.market,
+      collectionId: u.collectionId,
+      copies,
+    };
+  });
+  return { owner, ccCardsHeld: ccCards.length, held };
+}
+
 export async function devLaunch(
   rpcUrl: string,
   programId: string,
@@ -125,8 +228,26 @@ export async function devLaunch(
   const indexLamports = (await oracleFeedLamports(u, await solUsd()))!;
   if (!indexLamports) throw new Error("no oracle price available for this collectible");
 
-  const admin = kp(ADMIN_KEY);
-  const oracle = kp(ORACLE_KEY);
+  // Signer keys: env-first (JSON array or base64 Fly secret), then a file
+  // path, then the local-dev default. A deployed read-only indexer without
+  // these can't launch and says so clearly instead of an ENOENT stacktrace.
+  const adminSecret = resolveSecretKey({
+    keyEnv: "ADMIN_KEYPAIR",
+    pathEnv: "ADMIN_KEY_PATH",
+    defaultPath: `${homedir()}/.config/solana/id.json`,
+  });
+  const oracleSecret = resolveSecretKey({
+    keyEnv: "ORACLE_KEYPAIR",
+    pathEnv: "ORACLE_KEY_PATH",
+    defaultPath: ORACLE_KEY,
+  });
+  if (!adminSecret || !oracleSecret) {
+    throw new Error(
+      "launch signer not configured on this indexer (set ADMIN_KEYPAIR + ORACLE_KEYPAIR)"
+    );
+  }
+  const admin = Keypair.fromSecretKey(adminSecret);
+  const oracle = Keypair.fromSecretKey(oracleSecret);
   const connection = new Connection(rpcUrl, "confirmed");
 
   // Launch fee: 0.1 SOL to the protocol treasury, paid by the launching
