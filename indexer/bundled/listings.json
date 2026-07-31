@@ -1,0 +1,34 @@
+{
+  "FKBB8yEbsBW6BmWq1cJoDocKxySwJGVrrCZeKemAY1Y7": {
+    "name": "Frogana Floor",
+    "ticker": "flFROG",
+    "description": "devnet verification",
+    "launchedBy": "9D2d7j5yC2phSzSV5FXDiHH2CrTHQb3W3fyQ6ctXP4m3",
+    "links": {},
+    "identifier": "magiceden:froganas",
+    "itemMints": [
+      "CpNFRimXjYipdgX1JCzDjMGd3bYdNUwXXqs5Yee5d3Jb",
+      "AwKmfBZ6ktY3u7yZHHSfVPR6r9hmyYBSoYzFqfSL927J",
+      "5ahqyi1bfvE2jrc2FQ2wJh6BxJoY8kTCLUnc9haM214x"
+    ],
+    "indexAtLaunchLamports": 440000000,
+    "unitsPerItemMicro": 704000,
+    "launchedAt": 1785156995
+  },
+  "JB1F342ota9jEJ7qLXsUZ7TjaEJz5dgu9z49qwUzAsp4": {
+    "name": "Frogana Fee Test",
+    "ticker": "flFEE",
+    "launchedBy": "9D2d7j5yC2phSzSV5FXDiHH2CrTHQb3W3fyQ6ctXP4m3",
+    "links": {},
+    "identifier": "magiceden:froganas",
+    "feePaymentSig": "2HKhMCL31hoRUhGLujgKZA9xzZRoAzJC5eDRuSxag8ingRVwGAmpBYcSY1fhuJ4uPK7QbpwBVvspL9aZdWDrxYZ4",
+    "itemMints": [
+      "7bXeKPCKydR5k8God22aHbRNotyA63WCNEEvj9kdnAyM",
+      "33jduh48BhAyBPyiGdwbnQW712Xh54wLvRsS9A7Fovhn",
+      "7JuMAJ3CB8Fo4ZebohttHfkinNQNJhZhQncxCqmFobgB"
+    ],
+    "indexAtLaunchLamports": 440000000,
+    "unitsPerItemMicro": 704000,
+    "launchedAt": 1785158689
+  }
+}

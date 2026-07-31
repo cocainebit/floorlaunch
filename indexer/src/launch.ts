@@ -19,8 +19,11 @@ import { homedir } from "node:os";
 
 const LAMPORTS = 1e9;
 const BASE_UNITS_PER_NFT = 1_000_000_000_000n;
-const CATALOG_PATH = `${homedir()}/floorlaunch/app/src/underlyings.json`;
-const LISTINGS_PATH = new URL("../data/listings.json", import.meta.url).pathname;
+const CATALOG_PATH =
+  process.env.CATALOG_PATH ?? `${homedir()}/floorlaunch/app/src/underlyings.json`;
+const LISTINGS_PATH =
+  process.env.LISTINGS_PATH ??
+  new URL("../data/listings.json", import.meta.url).pathname;
 const ADMIN_KEY = process.env.ADMIN_KEY_PATH ?? `${homedir()}/.config/solana/id.json`;
 export const FEE_TREASURY = process.env.FEE_TREASURY ?? "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX";
 export const LAUNCH_FEE_LAMPORTS = Number(process.env.LAUNCH_FEE_LAMPORTS ?? 100_000_000);

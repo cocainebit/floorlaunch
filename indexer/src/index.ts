@@ -13,6 +13,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
 import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports } from "./launch.js";
+import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
   startVerification,
@@ -459,11 +460,14 @@ async function refreshOracles() {
   try {
     const { Keypair } = await import("@solana/web3.js");
     const anchorMod = await import("@coral-xyz/anchor");
-    const { readFileSync } = await import("node:fs");
     const { homedir } = await import("node:os");
-    const oracle = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(readFileSync(`${homedir()}/floorlaunch/relayer/keys/oracle-sim.json`, "utf8")))
-    );
+    const secret = resolveSecretKey({
+      keyEnv: "ORACLE_KEYPAIR",
+      pathEnv: "ORACLE_KEY_PATH",
+      defaultPath: `${homedir()}/floorlaunch/relayer/keys/oracle-sim.json`,
+    });
+    if (!secret) return; // no oracle key available: skip the refresh
+    const oracle = Keypair.fromSecretKey(secret);
     const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(oracle), {
       commitment: "confirmed",
     });
@@ -516,12 +520,15 @@ async function sweepFees() {
   try {
     const { Keypair } = await import("@solana/web3.js");
     const anchorMod = await import("@coral-xyz/anchor");
-    const { readFileSync } = await import("node:fs");
     const { homedir } = await import("node:os");
     const BN = (await import("bn.js")).default;
-    const admin = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(readFileSync(process.env.ADMIN_KEY_PATH ?? `${homedir()}/.config/solana/id.json`, "utf8")))
-    );
+    const secret = resolveSecretKey({
+      keyEnv: "ADMIN_KEYPAIR",
+      pathEnv: "ADMIN_KEY_PATH",
+      defaultPath: `${homedir()}/.config/solana/id.json`,
+    });
+    if (!secret) return; // no admin key available: skip the fee sweep
+    const admin = Keypair.fromSecretKey(secret);
     const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(admin), {
       commitment: "confirmed",
     });
@@ -564,11 +571,14 @@ async function autoGraduate() {
   try {
     const { Keypair } = await import("@solana/web3.js");
     const anchorMod = await import("@coral-xyz/anchor");
-    const { readFileSync } = await import("node:fs");
     const { homedir } = await import("node:os");
-    const admin = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(readFileSync(`${homedir()}/.config/solana/id.json`, "utf8")))
-    );
+    const secret = resolveSecretKey({
+      keyEnv: "ADMIN_KEYPAIR",
+      pathEnv: "ADMIN_KEY_PATH",
+      defaultPath: `${homedir()}/.config/solana/id.json`,
+    });
+    if (!secret) return; // no admin key available: skip auto-migration
+    const admin = Keypair.fromSecretKey(secret);
     const provider = new anchorMod.AnchorProvider(connection, new anchorMod.Wallet(admin), {
       commitment: "confirmed",
     });
