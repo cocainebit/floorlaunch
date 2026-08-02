@@ -12,7 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
-import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings } from "./launch.js";
+import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings, launchReadiness } from "./launch.js";
 import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
@@ -20,6 +20,8 @@ import {
   checkVerification,
   listEscrows,
   initEscrow,
+  startXOAuth,
+  handleXCallback,
   type Platform,
 } from "./escrow.js";
 
@@ -264,6 +266,34 @@ app.post("/escrow", (req, res) => {
   }
 });
 
+// X (Twitter) OAuth: /start redirects to X; /callback confirms the @username,
+// releases the escrow, and bounces back to the app.
+app.get("/verify-x/start", (req, res) => {
+  try {
+    const url = startXOAuth(
+      String(req.query.handle ?? ""),
+      String(req.query.wallet ?? ""),
+      req.query.returnTo ? String(req.query.returnTo) : undefined
+    );
+    res.redirect(url);
+  } catch (e: any) {
+    res.status(400).json({ error: String(e?.message ?? e).slice(0, 200) });
+  }
+});
+
+app.get("/verify-x/callback", async (req, res) => {
+  const r = await handleXCallback(
+    RPC,
+    String(req.query.code ?? ""),
+    String(req.query.state ?? "")
+  );
+  const sep = r.returnTo.includes("?") ? "&" : "?";
+  const q = r.ok
+    ? `x_verified=${encodeURIComponent(r.handle ?? "")}`
+    : `x_error=${encodeURIComponent(r.error ?? "failed")}`;
+  res.redirect(`${r.returnTo}${sep}${q}`);
+});
+
 app.post("/escrow/:platform/:handle/verify-start", (req, res) => {
   try {
     res.json(
@@ -283,6 +313,18 @@ app.post("/escrow/:platform/:handle/verify-check", async (req, res) => {
     );
   } catch (e: any) {
     res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
+  }
+});
+
+// Pre-fee readiness: the UI calls this before charging the launch fee, so a
+// launch that would fail never takes money.
+app.get("/launch/readiness", async (req, res) => {
+  try {
+    const id = typeof req.query.identifier === "string" ? req.query.identifier : undefined;
+    await launchReadiness(RPC, id);
+    res.json({ ready: true });
+  } catch (e: any) {
+    res.status(503).json({ ready: false, error: String(e?.message ?? e).slice(0, 200) });
   }
 });
 

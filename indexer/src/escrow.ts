@@ -17,8 +17,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { readFileSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
+import { resolveSecretKey } from "./keypair.js";
 
 const STORE = new URL("../data/escrows.json", import.meta.url).pathname;
 const ADMIN_KEY = `${homedir()}/.config/solana/id.json`;
@@ -165,9 +166,13 @@ export async function sweepEscrow(rpcUrl: string, platform: Platform, handle: st
   const bal = await connection.getBalance(escrow);
   if (bal <= 0) return { swept: 0 };
 
-  const admin = Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(readFileSync(ADMIN_KEY, "utf8")))
-  );
+  const secret = resolveSecretKey({
+    keyEnv: "ADMIN_KEYPAIR",
+    pathEnv: "ADMIN_KEY_PATH",
+    defaultPath: ADMIN_KEY,
+  });
+  if (!secret) throw new Error("admin signer not configured");
+  const admin = Keypair.fromSecretKey(secret);
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(admin), {
     commitment: "confirmed",
   });
@@ -189,4 +194,132 @@ export async function sweepEscrow(rpcUrl: string, platform: Platform, handle: st
 
 export function listEscrows() {
   return load();
+}
+
+// ---------- X (Twitter) OAuth 2.0 verification ----------
+//
+// Ownership is proven by an OAuth login, not a bio nonce: the creator
+// authorizes the app, we read their verified @username from /2/users/me, and
+// if it matches the handle we release the escrow. Stateless PKCE (the code
+// verifier is derived from a signed state via HMAC) so the /start and
+// /callback requests can land on different machines with no shared storage.
+
+const b64url = (b: Buffer) => b.toString("base64url");
+const xSecret = () =>
+  process.env.X_STATE_SECRET ?? process.env.X_CLIENT_SECRET ?? "commas-dev-secret";
+const xCallback = () =>
+  `${(process.env.PUBLIC_BASE_URL ?? "https://commas-indexer.fly.dev").replace(/\/+$/, "")}/verify-x/callback`;
+const xFallbackReturn = () => process.env.APP_RETURN_URL ?? "https://launch.commas.art";
+const RETURN_ALLOW = [
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https:\/\/([a-z0-9-]+\.)*commas\.art$/,
+];
+
+function safeReturn(url?: string): string {
+  if (!url) return xFallbackReturn();
+  try {
+    const u = new URL(url);
+    if (RETURN_ALLOW.some((re) => re.test(u.origin))) return u.origin + u.pathname;
+  } catch {}
+  return xFallbackReturn();
+}
+
+function signState(obj: unknown): string {
+  const payload = b64url(Buffer.from(JSON.stringify(obj)));
+  const sig = b64url(createHmac("sha256", xSecret()).update(payload).digest());
+  return `${payload}.${sig}`;
+}
+function verifyState(state: string): any | null {
+  const [payload, sig] = state.split(".");
+  if (!payload || !sig) return null;
+  const expect = b64url(createHmac("sha256", xSecret()).update(payload).digest());
+  if (sig !== expect) return null;
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch {
+    return null;
+  }
+}
+const pkceVerifier = (state: string) =>
+  b64url(createHmac("sha256", xSecret()).update(`pkce:${state}`).digest());
+
+/** Build the X authorize URL for a handle+wallet; throws if X isn't configured. */
+export function startXOAuth(handle: string, wallet: string, returnTo?: string): string {
+  if (!process.env.X_CLIENT_ID) throw new Error("X OAuth not configured on this indexer");
+  new PublicKey(wallet); // validate
+  const clean = handle.replace(/^@/, "");
+  if (!clean) throw new Error("handle required");
+  const state = signState({
+    handle: clean,
+    wallet,
+    returnTo: safeReturn(returnTo),
+  });
+  const verifier = pkceVerifier(state);
+  const challenge = b64url(createHash("sha256").update(verifier).digest());
+  const p = new URLSearchParams({
+    response_type: "code",
+    client_id: process.env.X_CLIENT_ID,
+    redirect_uri: xCallback(),
+    scope: "users.read tweet.read",
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  });
+  return `https://twitter.com/i/oauth2/authorize?${p.toString()}`;
+}
+
+/** Handle the X redirect: exchange the code, confirm the @username, release. */
+export async function handleXCallback(
+  rpcUrl: string,
+  code: string,
+  state: string
+): Promise<{ ok: boolean; returnTo: string; handle?: string; error?: string }> {
+  const parsed = verifyState(state);
+  const returnTo = parsed?.returnTo ?? xFallbackReturn();
+  if (!parsed || !code) return { ok: false, returnTo, error: "bad_state" };
+  if (!process.env.X_CLIENT_ID || !process.env.X_CLIENT_SECRET) {
+    return { ok: false, returnTo, error: "x_not_configured" };
+  }
+  const verifier = pkceVerifier(state);
+  const basic = Buffer.from(
+    `${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`
+  ).toString("base64");
+  const tokRes = await fetch("https://api.twitter.com/2/oauth2/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      authorization: `Basic ${basic}`,
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: xCallback(),
+      code_verifier: verifier,
+    }).toString(),
+  });
+  if (!tokRes.ok) return { ok: false, returnTo, error: "token_exchange_failed" };
+  const tok: any = await tokRes.json();
+  const meRes = await fetch("https://api.twitter.com/2/users/me", {
+    headers: { authorization: `Bearer ${tok.access_token}` },
+  });
+  if (!meRes.ok) return { ok: false, returnTo, error: "user_fetch_failed" };
+  const me: any = await meRes.json();
+  const username: string | undefined = me?.data?.username;
+  if (!username || username.toLowerCase() !== String(parsed.handle).toLowerCase()) {
+    return { ok: false, returnTo, error: "handle_mismatch", handle: parsed.handle };
+  }
+  // Verified: record ownership and release the accrued fees to the wallet.
+  getOrCreateEscrow("x", parsed.handle);
+  const d = load();
+  const e = d[key("x", parsed.handle)];
+  e.verified = true;
+  e.verifiedWallet = parsed.wallet;
+  save(d);
+  try {
+    await sweepEscrow(rpcUrl, "x", parsed.handle);
+  } catch {
+    // fees released on next sweep; ownership is already recorded.
+  }
+  return { ok: true, returnTo, handle: parsed.handle };
 }
