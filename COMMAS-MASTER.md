@@ -1,6 +1,6 @@
 # Commas - Master Build Log
 
-Last updated: 2026-07-31
+Last updated: 2026-08-02
 
 Brand: **commas** (domain commas.art). Repo stays named `floorlaunch`.
 Public repo: github.com/cocainebit/floorlaunch (main).
@@ -314,23 +314,78 @@ in `price-venues.{csv,json}` (Desktop `commas-underlyings` export): NFTs -> Magi
 Eden / Tensor / Solscan(collection); cards -> Collector Crypt / TCGplayer /
 eBay(sold) / PriceCharting.
 
+## 7d. Launch app + launch flow (2026-08-02)
+
+The public launch UI is a **separate Next.js repo the dev built**:
+`github.com/danishseal/commas-launchpad`. Cloned locally at
+`~/commas-launchpad`; run `cd ~/commas-launchpad/app && npm run dev` (env in
+`app/.env.local`, mainnet). The `app/` in THIS repo is the older Vite prototype.
+
+Launch flow = fee-first then create: the UI sends 0.1 SOL to the treasury, then
+`POST /dev/launch` (indexer signs `create_market` + initial oracle push with the
+admin key). Fixes shipped this session:
+- Removed the indexer's `dev launch is localnet/devnet-only` guard so mainnet
+  launches actually work (it silently rejected every launch after the fee).
+- Added `GET /launch/readiness?identifier=` preflight; the UI calls it **before**
+  charging, so a launch that would fail never takes a fee.
+- Frontend: mainnet `.env.local`, a genesis-hash cluster guard (no fee unless on
+  mainnet), removed stale ticker/name auto-fill, added a collectible card
+  (image + on-chain identity + Solscan), image-render fallbacks, hydration fix.
+- The launch fee `FEE_TREASURY` = `BNbCZ` (the user's own treasury); failed
+  attempts just moved SOL between the user's own wallets, nothing lost.
+
+## 7e. On-chain creator fee split - LIVE (2026-08-02)
+
+`create_market` now takes a `fee_receiver`; every trade fee splits **50%
+creator / 50% protocol** at accrual (`creator_fee_lamports` + `fee_lamports`).
+`withdraw_creator_fees` is a permissionless payout of the creator pool to the
+stored `fee_receiver` (a wallet, or an identity escrow PDA that `release_escrow`
+pays to a verified creator). 22 tests pass. **Program upgraded on mainnet**
+(slot 436831015, buffer refunded, net cost ~0.003 SOL) + indexer redeployed.
+`upgrade-mainnet.sh` scripts it. Before this, fee-receiver was UI/metadata only.
+
+## 7f. Identity verification for fee escrows
+
+Fee receiver can be a social identity; fees accrue in a keyless escrow PDA,
+released after ownership proof. Per platform:
+- **YouTube / Elite Fourum**: nonce-in-bio, real public fetch. Working.
+- **X (Twitter)**: **OAuth 2.0** (`/verify-x/start` -> X authorize, PKCE stateless;
+  `/verify-x/callback` confirms `@username` via `/2/users/me`, releases the
+  escrow). Code committed (`3a293df`). **PENDING to activate**: create an X dev
+  app, register callback `https://commas-indexer.fly.dev/verify-x/callback`, set
+  Fly secrets `X_CLIENT_ID` + `X_CLIENT_SECRET`, redeploy, add a "Verify with X"
+  button to the launchpad fee-receiver step.
+
 ## 8. Open / pending
 
-- [ ] Mainnet program deploy (needs ~5.5 SOL to admin key `BmPrXvji...`).
-- [ ] Decide devnet vs mainnet RPC for the live indexer (currently devnet).
-- [ ] Deploy blog to Vercel + Upstash (4 env vars) when ready.
-- [ ] Commit the new blog hero image if not already committed.
-- [ ] Custom domain api.commas.art was **skipped** on purpose; using raw
-      commas-indexer.fly.dev. (Reopen with `fly certs add api.commas.art` if wanted.)
-- [ ] Point launch app + blog envs at the fly.dev URLs above.
+- [ ] **Activate X OAuth**: X dev app + `X_CLIENT_ID`/`X_CLIENT_SECRET` secrets +
+      redeploy indexer + "Verify with X" button in the launchpad.
+- [ ] Deploy the launchpad (`danishseal/commas-launchpad`) to prod (Vercel) with
+      mainnet env; apply the cluster-guard + placeholder/collectible-card fixes.
+- [ ] First live mainnet market (none created yet; `/markets` = []).
+- [ ] Automated graded-card price feed (`gradedApi` / `TCG_GRADED_API_KEY`);
+      cards run on Collector-Crypt-seeded `manual` prices today.
+- [ ] Wire Tensor into NFT floor pricing (code is Magic Eden only; docs claim both).
+- [ ] Deploy blog to Vercel + Upstash when ready.
+- [ ] Security: BNbCZ = treasury + admin + upgrade authority + launch signer, and
+      its key is on the Fly box. Revisit custody (dedicated signer / multisig
+      upgrade authority) post-launch.
 
 ---
 
 ## 9. Access map (where secrets live)
 
-- Privy secret: `blog/.env.local` (gitignored).
-- Helius RPC key: `~/Desktop/floorlaunch-rpc.txt`; also a Fly secret on the indexer.
-- Fly app: `commas-indexer` (iad), card on file.
-- Program admin key: `BmPrXvji...` (funding pending).
-- Oracle/admin keypairs for keepers: `oracle-sim.json`, `floorlaunch.json`
-  (zipped to Desktop earlier). NOT shipped in the indexer image.
+- **Mainnet admin/upgrade authority/treasury** = `BNbCZ...GNAX`, key at
+  `~/.config/solana/commas-mainnet-admin.json` (from `~/Desktop/floorlaunch-mainnet-wallet.txt`).
+  Also set as Fly secret `ADMIN_KEYPAIR` on the indexer.
+- **Mainnet oracle** = `EXTDwZBm...DfGj`, `relayer/keys/oracle-mainnet.json`
+  (gitignored); Fly secret `ORACLE_KEYPAIR`.
+- **Devnet** admin `9D2d7...` (`~/.config/solana/id.json`), oracle `79xQVE...`
+  (`relayer/keys/oracle-sim.json`).
+- Helius RPC key: `~/Desktop/floorlaunch-rpc.txt`; Fly secrets `RPC_URL`
+  (devnet market RPC) + `DAS_RPC_URL` (mainnet, for holdings).
+- Privy: app id `cms4p9blf01o40cjm0wexxlzs`; secret in `blog/.env.local` /
+  launchpad `.env.local`.
+- Fly app: `commas-indexer` (iad), billing active.
+- Dev secrets bundles on Desktop: `commas-dev-secrets.txt` (devnet keys),
+  `commas-underlyings.zip`, `commas-dev-changes.zip`.
