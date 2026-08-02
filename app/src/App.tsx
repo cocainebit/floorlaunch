@@ -110,7 +110,7 @@ export default function App() {
           >
             Index
           </span>
-          <a className="nav-item" href="http://localhost:3333" target="_blank" rel="noreferrer">
+          <a className="nav-item" href="https://commas.art" target="_blank" rel="noreferrer">
             Docs
           </a>
         </nav>

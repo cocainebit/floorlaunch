@@ -35,7 +35,7 @@ import {
 import * as anchor from "@coral-xyz/anchor";
 
 export const RPC_URL =
-  (import.meta as any).env?.VITE_RPC_URL ?? "https://api.devnet.solana.com";
+  (import.meta as any).env?.VITE_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 export const IS_LOCALNET =
   RPC_URL.includes("127.0.0.1") || RPC_URL.includes("localhost");
 const PRIVY_APP_ID = (import.meta as any).env?.VITE_PRIVY_APP_ID as string;
