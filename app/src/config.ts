@@ -2,8 +2,12 @@
 export const FEE_TREASURY = "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX";
 export const LAUNCH_FEE_SOL = 0.1;
 
-export const INDEXER_HTTP = "http://127.0.0.1:8787";
-export const INDEXER_WS = "ws://127.0.0.1:8787/ws";
+// Defaults to the live mainnet indexer; override for local dev or a self-hosted
+// instance via VITE_INDEXER_HTTP / VITE_INDEXER_WS.
+export const INDEXER_HTTP =
+  import.meta.env.VITE_INDEXER_HTTP ?? "https://commas-indexer.fly.dev";
+export const INDEXER_WS =
+  import.meta.env.VITE_INDEXER_WS ?? "wss://commas-indexer.fly.dev/ws";
 
 /** Per-collection presentation metadata, keyed by on-chain collection id. */
 export const COLLECTION_META: Record<
