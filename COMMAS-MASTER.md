@@ -245,9 +245,22 @@ c591ced blog: real backend for comments + subscribers
 
 ---
 
-## 7b. Mainnet bring-up (2026-08-01) - staged, awaiting deploy funding
+## 7b. Mainnet bring-up - LIVE (2026-08-02)
 
-Everything is prepped so the ONLY remaining task is funding the deploy.
+Protocol is live on mainnet. Program `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`
+(deploy sig 5Jtaf4iHczVru4tApP7h8YiUn26Rjcwjv1cfjVMmQP97HcLfe5vBFq4M1v8XvC7hGEkdprSgsiyc8A6vyrYNoTUd),
+global config `3HmyakKbiYHBKjXUpmZWffBiLzQ2f3ZwR22HAHucTz2t` (admin=BNbCZ,
+oracle=EXTDwZBm9oj2E4qvJwTnjq33f6C39uCfhdhcBarADfGj). Indexer flipped to mainnet
+(RPC_URL + ADMIN_KEYPAIR + ORACLE_KEYPAIR set on Fly). `/markets` returns [] until
+the first market is created. Admin BNbCZ ~2.4 SOL left after ~4.4 refundable rent.
+
+Remaining to a public launch: create first market(s), point the frontend
+(launch.commas.art + blog) at the mainnet indexer and deploy them. Security:
+BNbCZ (treasury+admin+upgrade+launch signer) is now on the Fly box - revisit
+custody post-launch.
+
+--- original prep notes ---
+Everything was prepped so the ONLY remaining task was funding the deploy.
 
 - Admin/payer/upgrade-authority = the **BNbCZ treasury wallet** (user's choice),
   key at `~/.config/solana/commas-mainnet-admin.json`. Mainnet balance ~1.96 SOL;
