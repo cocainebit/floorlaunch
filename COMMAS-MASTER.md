@@ -245,6 +245,33 @@ c591ced blog: real backend for comments + subscribers
 
 ---
 
+## 7b. Mainnet bring-up (2026-08-01) - staged, awaiting deploy funding
+
+Everything is prepped so the ONLY remaining task is funding the deploy.
+
+- Admin/payer/upgrade-authority = the **BNbCZ treasury wallet** (user's choice),
+  key at `~/.config/solana/commas-mainnet-admin.json`. Mainnet balance ~1.96 SOL;
+  needs ~4.6 to deploy (~4.4 rent + buffer).
+- Oracle = fresh dedicated hot key `EXTDwZBm9oj2E4qvJwTnjq33f6C39uCfhdhcBarADfGj`
+  (`relayer/keys/oracle-mainnet.json`, gitignored). NOT the upgrade authority.
+- Program id stays `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM` (same keypair,
+  cluster-independent). Binary is the optimized 565.7 KB build.
+- `init-global.ts` is now env-aware (`ADMIN_KEY_PATH` / `ORACLE_KEY_PATH`).
+- **`deploy-mainnet.sh`** does it all once funded: deploy -> fund oracle 0.1 SOL
+  -> init global (admin=BNbCZ, oracle=EXTDwZBm) -> flip the Fly indexer to
+  mainnet (RPC_URL + ADMIN_KEYPAIR + ORACLE_KEYPAIR secrets). Preflight aborts
+  if the admin balance is under ~4.6 SOL.
+
+Note on v1 vs DBC: this is the **v1 custom program**, not Meteora DBC. Params
+are immutable after init, but freeze/unfreeze and fee-withdrawal ARE admin
+functions - the BNbCZ key holds real authority (and will sit on the Fly box to
+sign launches). Concentration risk: BNbCZ = treasury + admin + upgrade authority
++ launch signer. Acceptable for launch per operator; revisit (separate keys /
+multisig upgrade authority) post-launch.
+
+Review before flip: global `graduationTargetSol` default in init-global params
+is 10 SOL (devnet value) - confirm the intended mainnet economics.
+
 ## 8. Open / pending
 
 - [ ] Mainnet program deploy (needs ~5.5 SOL to admin key `BmPrXvji...`).
