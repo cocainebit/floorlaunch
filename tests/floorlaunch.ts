@@ -127,7 +127,7 @@ describe("floorlaunch", () => {
 
   it("creates a market", async () => {
     await program.methods
-      .createMarket(collection, null)
+      .createMarket(collection, null, payer.publicKey)
       .accountsPartial({
         global: globalPda,
         admin: payer.publicKey,
@@ -884,7 +884,7 @@ describe("floorlaunch", () => {
       program.programId
     );
     await program.methods
-      .createMarket(coll2, null)
+      .createMarket(coll2, null, payer.publicKey)
       .accountsPartial({
         global: globalPda,
         admin: payer.publicKey,
@@ -1042,5 +1042,39 @@ describe("floorlaunch", () => {
       .rpc();
     const after = await market();
     assert.equal(after.feeLamports.toString(), "0");
+  });
+
+  it("pays the creator fee share only to the market fee receiver", async () => {
+    const before = await market();
+    // Trade fees were split 50/50, so the creator pool accrued too.
+    assert.isTrue(before.creatorFeeLamports.gt(new BN(0)));
+    // A wrong recipient is rejected.
+    let rejected = false;
+    try {
+      await program.methods
+        .withdrawCreatorFees()
+        .accountsPartial({
+          market: marketPda,
+          solVault: vaultPda,
+          feeReceiver: oracle.publicKey,
+          cranker: payer.publicKey,
+        })
+        .rpc();
+    } catch {
+      rejected = true;
+    }
+    assert.isTrue(rejected);
+    // The real fee receiver (set at create_market) drains the pool.
+    await program.methods
+      .withdrawCreatorFees()
+      .accountsPartial({
+        market: marketPda,
+        solVault: vaultPda,
+        feeReceiver: payer.publicKey,
+        cranker: payer.publicKey,
+      })
+      .rpc();
+    const after = await market();
+    assert.equal(after.creatorFeeLamports.toString(), "0");
   });
 });

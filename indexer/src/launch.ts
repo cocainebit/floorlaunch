@@ -207,6 +207,34 @@ export async function cardHoldings(
   return { owner, ccCardsHeld: ccCards.length, held };
 }
 
+/**
+ * Validate everything a launch needs BEFORE the user is asked to pay the fee:
+ * signer keys present on this indexer, the underlying is in the catalog, and a
+ * live oracle price exists. Throws with a clear reason if not ready, so the UI
+ * can block the fee. Mirrors devLaunch's pre-fee checks.
+ */
+export async function launchReadiness(rpcUrl: string, identifier?: string): Promise<void> {
+  const admin = resolveSecretKey({
+    keyEnv: "ADMIN_KEYPAIR",
+    pathEnv: "ADMIN_KEY_PATH",
+    defaultPath: `${homedir()}/.config/solana/id.json`,
+  });
+  const oracle = resolveSecretKey({
+    keyEnv: "ORACLE_KEYPAIR",
+    pathEnv: "ORACLE_KEY_PATH",
+    defaultPath: ORACLE_KEY,
+  });
+  if (!admin || !oracle) {
+    throw new Error("launch signer not configured on this indexer");
+  }
+  if (identifier) {
+    const u = loadCatalog().find((c) => c.identifier === identifier);
+    if (!u) throw new Error("unknown underlying");
+    const px = await oracleFeedLamports(u, await solUsd());
+    if (!px) throw new Error("no oracle price available for this collectible");
+  }
+}
+
 export async function devLaunch(
   rpcUrl: string,
   programId: string,
@@ -214,9 +242,9 @@ export async function devLaunch(
   body: { collectionId?: string; identifier?: string; meta: Omit<ListingMeta, "launchedAt" | "identifier"> }
 ): Promise<{ market: string; indexLamports: number }> {
   const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
-  if (!isLocal && !rpcUrl.includes("devnet")) {
-    throw new Error("dev launch is localnet/devnet-only");
-  }
+  // Any cluster is allowed. On non-local clusters the 0.1 SOL launch fee is
+  // verified below and the market is created by the admin service on the
+  // creator's behalf (the intended v1 model), gated to the curated catalog.
   const catalog: any[] = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
   const u = body.identifier
     ? catalog.find((c) => c.identifier === body.identifier)
@@ -342,8 +370,16 @@ export async function devLaunch(
       curveVirtualSol: new BN(vSol.toString()),
       curveVirtualTokens: new BN(vTok.toString()),
     };
+    // Resolve the on-chain fee receiver: an identity escrow PDA if present,
+    // else the chosen wallet, else the protocol treasury as a safe fallback.
+    let feeReceiverPk = new PublicKey(FEE_TREASURY);
+    const fr: any = (body.meta as any)?.feeReceiver;
+    try {
+      if (fr?.escrow) feeReceiverPk = new PublicKey(fr.escrow);
+      else if (fr?.value) feeReceiverPk = new PublicKey(fr.value);
+    } catch {}
     await program.methods
-      .createMarket(collection, params as any)
+      .createMarket(collection, params as any, feeReceiverPk)
       .accountsPartial({
         global: globalPda,
         admin: admin.publicKey,

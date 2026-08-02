@@ -128,6 +128,11 @@ pub struct Market {
     // Lamport accounting inside the shared sol vault.
     pub insurance_lamports: u64,
     pub fee_lamports: u64,
+    /// Creator (fee-receiver) share of trade fees, accrued in the shared sol
+    /// vault. Withdrawable to `fee_receiver` by anyone (funds only go there).
+    pub creator_fee_lamports: u64,
+    /// Destination for the creator fee share: a wallet or an identity escrow PDA.
+    pub fee_receiver: Pubkey,
 
     /// Items currently held by the market's item escrow.
     pub items_deposited: u32,

@@ -40,6 +40,7 @@ pub mod floorlaunch {
         ctx: Context<CreateMarket>,
         collection: Pubkey,
         params: Option<MarketParams>,
+        fee_receiver: Pubkey,
     ) -> Result<()> {
         let params = params.unwrap_or(ctx.accounts.global.default_params);
         require!(params.curve_virtual_sol > 0, Err::ZeroAmount);
@@ -68,6 +69,7 @@ pub mod floorlaunch {
             m.vault_bump = ctx.bumps.sol_vault;
             m.mint_bump = ctx.bumps.synth_mint;
             m.treasury_bump = ctx.bumps.treasury;
+            m.fee_receiver = fee_receiver;
         }
         // Fixed supply: premint the full curve allocation and the hedging
         // reserve, then revoke the mint authority forever. From here on,
@@ -258,7 +260,9 @@ pub mod floorlaunch {
         update_mark(m)?;
         m.curve_sol_raised += net_in;
         m.curve_tokens_sold += tokens_out;
-        m.fee_lamports += fee;
+        let creator_cut = mul_bps(fee, CREATOR_FEE_SHARE_BPS);
+        m.creator_fee_lamports += creator_cut;
+        m.fee_lamports += fee - creator_cut;
 
         transfer_in(
             &ctx.accounts.user,
@@ -301,7 +305,9 @@ pub mod floorlaunch {
         m.curve_virtual_sol -= sol_gross;
         m.curve_sol_raised -= sol_gross;
         m.curve_tokens_sold -= tokens_in;
-        m.fee_lamports += fee;
+        let creator_cut = mul_bps(fee, CREATOR_FEE_SHARE_BPS);
+        m.creator_fee_lamports += creator_cut;
+        m.fee_lamports += fee - creator_cut;
 
         token::transfer(
             CpiContext::new(
@@ -409,7 +415,9 @@ pub mod floorlaunch {
 
         m.amm_sol_reserve += net_in;
         m.amm_token_reserve -= tokens_out;
-        m.fee_lamports += fee;
+        let creator_cut = mul_bps(fee, CREATOR_FEE_SHARE_BPS);
+        m.creator_fee_lamports += creator_cut;
+        m.fee_lamports += fee - creator_cut;
         update_mark(m)?;
 
         transfer_in(
@@ -450,7 +458,9 @@ pub mod floorlaunch {
 
         m.amm_token_reserve += tokens_in;
         m.amm_sol_reserve -= sol_gross;
-        m.fee_lamports += fee;
+        let creator_cut = mul_bps(fee, CREATOR_FEE_SHARE_BPS);
+        m.creator_fee_lamports += creator_cut;
+        m.fee_lamports += fee - creator_cut;
         update_mark(m)?;
 
         token::transfer(
@@ -913,9 +923,37 @@ pub mod floorlaunch {
         )?;
         Ok(())
     }
+
+    /// Pay the accrued creator fee share to the market's fee_receiver.
+    /// Permissionless: funds can only ever go to the stored fee_receiver
+    /// (a wallet, or an identity escrow PDA that release_escrow later pays out).
+    pub fn withdraw_creator_fees(ctx: Context<WithdrawCreatorFees>) -> Result<()> {
+        let m = &mut ctx.accounts.market;
+        require_keys_eq!(
+            ctx.accounts.fee_receiver.key(),
+            m.fee_receiver,
+            Err::Unauthorized
+        );
+        let amount = m.creator_fee_lamports;
+        require!(amount > 0, Err::InsufficientVaultFunds);
+        m.creator_fee_lamports = 0;
+        let market_key = ctx.accounts.market.key();
+        transfer_out(
+            &ctx.accounts.sol_vault,
+            &ctx.accounts.fee_receiver,
+            &ctx.accounts.system_program,
+            market_key,
+            ctx.accounts.market.vault_bump,
+            amount,
+        )?;
+        Ok(())
+    }
 }
 
 // ---------- helpers ----------
+
+/// Creator (fee-receiver) share of each trade fee, bps; the rest is protocol.
+const CREATOR_FEE_SHARE_BPS: u16 = 5000;
 
 fn mul_bps(amount: u64, bps: u16) -> u64 {
     ((amount as u128 * bps as u128) / BPS) as u64
@@ -1551,5 +1589,18 @@ pub struct WithdrawFees<'info> {
     /// CHECK: fee destination chosen by admin.
     #[account(mut)]
     pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawCreatorFees<'info> {
+    #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
+    pub market: Account<'info, Market>,
+    #[account(mut, seeds = [b"vault", market.key().as_ref()], bump = market.vault_bump)]
+    pub sol_vault: SystemAccount<'info>,
+    /// CHECK: must equal market.fee_receiver; enforced in the handler.
+    #[account(mut)]
+    pub fee_receiver: AccountInfo<'info>,
+    pub cranker: Signer<'info>,
     pub system_program: Program<'info, System>,
 }

@@ -988,6 +988,10 @@
               }
             }
           }
+        },
+        {
+          "name": "fee_receiver",
+          "type": "pubkey"
         }
       ]
     },
@@ -3160,6 +3164,85 @@
       ]
     },
     {
+      "name": "withdraw_creator_fees",
+      "docs": [
+        "Pay the accrued creator fee share to the market's fee_receiver.",
+        "Permissionless: funds can only ever go to the stored fee_receiver",
+        "(a wallet, or an identity escrow PDA that release_escrow later pays out)."
+      ],
+      "discriminator": [
+        8,
+        30,
+        213,
+        18,
+        121,
+        105,
+        129,
+        222
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.collection",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sol_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_receiver",
+          "writable": true
+        },
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "withdraw_fees",
       "discriminator": [
         198,
@@ -4376,6 +4459,21 @@
           {
             "name": "fee_lamports",
             "type": "u64"
+          },
+          {
+            "name": "creator_fee_lamports",
+            "docs": [
+              "Creator (fee-receiver) share of trade fees, accrued in the shared sol",
+              "vault. Withdrawable to `fee_receiver` by anyone (funds only go there)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fee_receiver",
+            "docs": [
+              "Destination for the creator fee share: a wallet or an identity escrow PDA."
+            ],
+            "type": "pubkey"
           },
           {
             "name": "items_deposited",
