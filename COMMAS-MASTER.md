@@ -285,6 +285,35 @@ multisig upgrade authority) post-launch.
 Review before flip: global `graduationTargetSol` default in init-global params
 is 10 SOL (devnet value) - confirm the intended mainnet economics.
 
+## 7c. Oracle price sources by collectible (verified vs code, 2026-08-02)
+
+What each index is actually priced from. USD legs convert to SOL via **Pyth
+SOL/USD** (Hermes) everywhere.
+
+**Graded cards (all 57):** `manual` - operator-attested USD in config, seeded
+from the **Collector Crypt** floor/median at listing. No card is on an automated
+live feed yet. `relayer/src/sources/card.ts` also ships:
+- `pokemontcg` (live): pokemontcg.io -> TCGplayer market price, **RAW cards
+  only** (must not price a graded market); unused today.
+- `gradedApi` (**PENDING**): PSA/BGS via a subscription API (TCG Price Lookup et
+  al.) + Collector Crypt/Courtyard cross-checks; refuses to run without
+  `TCG_GRADED_API_KEY`.
+So graded-card indices move on operator-maintained values, not a hands-off feed.
+Do not overstate this in launch copy.
+
+**NFT floors (all 11):** live **Magic Eden** floor
+(`/v2/collections/{symbol}/stats`), 5-min cache, snapshot fallback. Code is
+**Magic Eden only** - docs mention Tensor bids + sale TWAPs, but Tensor is not
+wired. Docs-vs-code gap to fix or restate.
+
+**External-venue (Meteora DBC) markets:** mark from Meteora's DAMM pool API
+(`damm-api.meteora.ag`), pushed via `push_mark`. None in the catalog yet.
+
+**Public venue links** per underlying (where each price is visible) are exported
+in `price-venues.{csv,json}` (Desktop `commas-underlyings` export): NFTs -> Magic
+Eden / Tensor / Solscan(collection); cards -> Collector Crypt / TCGplayer /
+eBay(sold) / PriceCharting.
+
 ## 8. Open / pending
 
 - [ ] Mainnet program deploy (needs ~5.5 SOL to admin key `BmPrXvji...`).
