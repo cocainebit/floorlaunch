@@ -12,7 +12,7 @@ import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
-import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings, launchReadiness } from "./launch.js";
+import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings, launchReadiness, loadCatalog } from "./launch.js";
 import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
@@ -201,6 +201,9 @@ function candles(market: string, tfSecs: number, limit: number) {
 // ---------- REST + WS ----------
 
 const app = express();
+// Behind Fly's proxy: makes req.protocol reflect x-forwarded-proto (https),
+// so upload URLs are https and don't 301-redirect.
+app.set("trust proxy", true);
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
@@ -404,9 +407,7 @@ app.get("/markets", async (_req, res) => {
 // Eden floors are fetched with a 5 minute cache.
 app.get("/aggregator", async (_req, res) => {
   try {
-    const catalog: any[] = JSON.parse(
-      readFileSync(`${process.env.HOME}/floorlaunch/app/src/underlyings.json`, "utf8")
-    );
+    const catalog: any[] = loadCatalog();
     const listings = loadListings();
     const accounts = await (program.account as any).market.all();
     const solUsd = await getSolUsd();
