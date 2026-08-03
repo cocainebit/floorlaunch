@@ -605,6 +605,14 @@ app.get("/markets", async (_req, res) => {
             graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
             maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
             itemsDeposited: a.account.itemsDeposited,
+            // Real 24h SOL volume from the full trade store (all indexed trades,
+            // incl. Meteora swaps), not just the slice the client fetches.
+            volume24hSol: (() => {
+              const cutoff = Math.floor(Date.now() / 1000) - 86_400;
+              return store(a.publicKey.toBase58()).trades
+                .filter((t) => t.ts >= cutoff)
+                .reduce((s, t) => s + t.solAmount, 0);
+            })(),
           };
           // External (Meteora DBC) markets: override the traded price + liquidity
           // with the live pool so the explorer reflects the real Meteora venue.
