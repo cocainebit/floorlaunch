@@ -1,27 +1,27 @@
 ---
 title: "Sell a token"
-description: "Exit to SOL on the curve or the AMM."
+description: "Exit to SOL on the Meteora pool, routed by Jupiter."
 ---
 
-Selling mirrors buying: same venues, same fee, quoted before you sign.
+Selling mirrors buying: same venue, same fee, quoted before you sign.
 
 <Steps>
   <Step title="Pick an amount">
-    The panel quotes the SOL you will receive after the 0.70% fee and shows
+    The panel quotes the SOL you will receive after the 0.7% fee and shows
     the price impact.
   </Step>
   <Step title="Confirm">
-    During the curve phase your sell walks back down the launch curve.
-    After migration it sells into the AMM pool, which started with 100 SOL
-    of real liquidity at migration.
+    Your sell routes through **Jupiter** into the token's
+    [Meteora](https://www.meteora.ag) pool (a Dynamic Bonding Curve at launch,
+    a DAMM v2 pool after migration). The fill lands in one transaction.
   </Step>
 </Steps>
 
 ## Exiting into the real thing
 
-If the market's escrow holds deposited copies of the collectible, you have a second exit: instead of selling for SOL, redeem your tokens for an actual copy. See [Take out the card](/guides/quickstart/redeem-a-card).
+If the market's item reserve and escrow hold copies of the collectible, you have a second exit: instead of selling for SOL, swap your tokens for an actual copy. See [Take out the card](/guides/quickstart/redeem-a-card).
 
 <Note>
-  Selling is never gated: no lockups, no windows, no allowlists. The curve
-  and the AMM are live around the clock.
+  Selling is never gated: no lockups, no windows, no allowlists. The Meteora
+  pool trades around the clock, and commas cannot pause it.
 </Note>

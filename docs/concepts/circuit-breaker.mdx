@@ -3,7 +3,7 @@ title: "Circuit Breaker"
 description: "Automatic and manual freezes that stop a bad price from becoming a bad outcome."
 ---
 
-The oracle index is the single input every risk decision depends on: collateral checks, funding, liquidations. The circuit breaker exists so that one bad print, whether from manipulation, a source outage, or a fat-fingered push from the price feed service (the relayer), halts the market instead of flowing into those decisions.
+The oracle index is the single input every risk decision depends on: collateral checks, funding, liquidations. The circuit breaker exists so that one bad print, whether from manipulation, a source outage, or a fat-fingered push from the price feed service (the relayer), halts the commas-side machinery instead of flowing into those decisions.
 
 <Frame caption="The index defense stack, layered by time scale.">
   <img className="hidden dark:block" src="/images/protocol/12-defense-stack.png" alt="The index defense stack, layered by time scale." noZoom />
@@ -23,7 +23,7 @@ if deviation_bps > breaker_bps:
     // but is NOT absorbed into the TWAP
 ```
 
-The outlier never contaminates the index. The market emits a `BreakerTripped` event carrying the observed price and the TWAP it deviated from, and everything risk-bearing stops until a human looks.
+The outlier never contaminates the index. The market emits a `BreakerTripped` event carrying the observed price and the TWAP it deviated from, and everything risk-bearing on the commas side stops until a human looks.
 
 With an illustrative `breaker_bps = 2000`, any push more than 20% away from the TWAP freezes the market. Real collectible prices rarely move that fast between pushes; a print that does is treated as suspect by default.
 
@@ -35,14 +35,14 @@ Unfreezing is always manual and admin-only. There is no automatic recovery timer
 
 ## What frozen blocks
 
+A freeze pauses the **commas-side** machinery. It does **not** pause trading on the [Meteora](https://www.meteora.ag) pool: commas never holds the pool, so the token keeps trading on Meteora regardless. What stops is everything commas controls that reads the index.
+
 | Blocked | Allowed |
 | --- | --- |
-| Curve buys and sells | `add_collateral` |
-| AMM buys and sells | Admin operations (`set_frozen`, params) |
-| `open_short`, `withdraw_collateral`, `repay_burn` | Reading all state |
-| `accrue_funding` | |
-| `liquidate` | |
-| `graduate` | |
+| `open_short`, `withdraw_collateral`, `close_position` | `add_collateral` |
+| `accrue_funding` | Admin operations (`set_frozen`, params) |
+| `liquidate` | Trading on the Meteora pool (out of commas' control) |
+| Item swaps (`deposit_item`, `withdraw_item`) | Reading all state |
 | Oracle pushes (`push_index`, `push_mark`) | |
 
 Three of these deserve explanation:

@@ -1,57 +1,41 @@
 ---
 title: "AMM & Mark Price"
-description: "The internal constant-product pool that hosts live trading, and the manipulation-resistant mark price it produces for funding"
+description: "The Meteora pool that hosts live trading, and the manipulation-resistant mark price commas derives from it for funding"
 ---
 
-After [Graduation](/concepts/graduation), the synth trades against an **internal constant-product AMM** owned by the market itself. The pool serves two jobs: it is the liquidity venue for longs, and it produces the **mark price** that the [funding mechanism](/concepts/funding) compares against the oracle index.
+A ***commas*** token trades on its **[Meteora](https://www.meteora.ag) pool**: a Dynamic Bonding Curve at launch that Meteora migrates to a **DAMM v2** constant-product pool. The pool serves two jobs: it is the liquidity venue for longs (routed by Jupiter), and it produces the **mark price** that the [funding mechanism](/concepts/funding) compares against the oracle index.
 
-<Frame caption="The venue abstraction: internal curve and AMM versus Meteora DBC.">
-  <img className="hidden dark:block" src="/images/protocol/19-venue-split.png" alt="The venue abstraction: internal curve and AMM versus Meteora DBC." noZoom />
-  <img className="block dark:hidden" src="/images/protocol/19-venue-split-light.png" alt="The venue abstraction: internal curve and AMM versus Meteora DBC." noZoom />
+<Frame caption="The venue: a Meteora DBC pool that migrates to DAMM v2, with an oracle-pushed mark.">
+  <img className="hidden dark:block" src="/images/protocol/19-venue-split.png" alt="The venue: a Meteora DBC pool that migrates to DAMM v2, with an oracle-pushed mark." noZoom />
+  <img className="block dark:hidden" src="/images/protocol/19-venue-split-light.png" alt="The venue: a Meteora DBC pool that migrates to DAMM v2, with an oracle-pushed mark." noZoom />
 </Frame>
 
-## Real reserves
+## The pool holds SOL and the token
 
-Unlike the launch curve's virtual reserves, the AMM holds real assets:
+The Meteora pool is a constant-product pool over two real assets:
 
-- `amm_sol_reserve`: lamports, held in the market's SOL vault
-- `amm_token_reserve`: synth base units, held in the market's pool token account
+- SOL (lamports)
+- the token (base units)
 
-Both sides were seeded at graduation, paired at the curve's closing price. The pool is protocol-owned: there are no external LPs, no LP tokens, and no impermanent-loss surface for users.
+The pool is Meteora's audited infrastructure; commas holds no custody of it and no LP position for users to manage. The collectible is **not** an asset inside the pool: a constant-product AMM holds SOL and the token, never a physical card or NFT. "The underlying is the collectible" means the pool's token *is* the collectible's price (via the oracle index) and identity (via metadata), plus the optional [item swap](/concepts/synth-token#item-swaps) door, not a card sitting inside the pool.
 
 ## Swaps
 
-`amm_buy(sol_in, min_tokens_out)` and `amm_sell(tokens_in, min_sol_out)` are standard constant-product swaps with a fee in bps taken on the SOL side:
-
-```text
-buy:  fee = sol_in * amm_fee_bps / 10_000
-      tokens_out = reserve_tok - ceil(k / (reserve_sol + sol_in - fee))
-
-sell: sol_gross = reserve_sol - ceil(k / (reserve_tok + tokens_in))
-      sol_out   = sol_gross - fee
-```
-
-Fees accumulate in `fee_lamports` (withdrawable by the admin, see [Instructions](/reference/instructions)). Buys transfer tokens out of the pool account; sells transfer them back in. AMM trading neither mints nor burns supply.
+Buys and sells route through **Jupiter** into the Meteora pool as standard constant-product swaps, with the pool's **0.7%** base fee taken on the trade. Fees are collected by Meteora and split 50/50 creator/protocol per the pool config; commas does not re-implement swap accounting. Pool trading neither mints nor burns supply.
 
 ## Spot and mark
 
-The pool's spot price, expressed in lamports per whole unit (the same scale as the index):
-
-```text
-spot_per_unit = amm_sol_reserve * 1_000_000_000_000 / amm_token_reserve
-```
-
-The market does not use spot directly. It maintains `mark_ema`, a time-weighted EMA of spot updated on **every swap and every funding crank**:
+The pool's spot price is expressed in lamports per whole unit (the same scale as the index). commas does not read spot directly, and it does not parse Meteora's pool bytes on chain. Instead the relayer computes the pool price from Meteora's public API and pushes it via [`push_mark`](/reference/instructions#push_mark); the program maintains `mark_ema`, a time-weighted EMA of the pushed mark, updated on every push and every funding crank:
 
 ```text
 w  = mark_window_secs
 dt = min(seconds since last mark update, w)
 
-mark_ema = (mark_ema * (w - dt) + spot * dt) / w
+mark_ema = (mark_ema * (w - dt) + mark * dt) / w
 ```
 
 <Warning>
-This is the AMM's manipulation defense. A single-block push of the pool price moves `mark_ema` only by `dt / w`, and `dt` inside one block is zero or near zero. To move the mark meaningfully an attacker must hold the pool at a distorted price for a large fraction of the window, paying fees and inventory risk the whole time, while arbitrageurs trade against them.
+This is the manipulation defense. A single-block push of the pool price moves `mark_ema` only by `dt / w`, and `dt` inside one block is zero or near zero. To move the mark meaningfully an attacker must hold the pool at a distorted price for a large fraction of the window, paying fees and inventory risk the whole time, while arbitrageurs trade against them. A bad `push_mark` from the oracle key can likewise only tilt the clamped funding flow, matching the trust already placed in that key for the index.
 </Warning>
 
 ## What the mark does and does not touch
@@ -62,23 +46,22 @@ This is the AMM's manipulation defense. A single-block push of the pool price mo
 | Collateral ratio checks | index only |
 | Liquidation eligibility and payouts | index only |
 
-The mark's only job is steering funding. Collateral and liquidation math never read the pool, so manipulating the AMM cannot force anyone's liquidation. See [Price Index](/concepts/price-index) and [Liquidations](/concepts/liquidations).
+The mark's only job is steering funding. Collateral and liquidation math never read the pool, so manipulating the Meteora price cannot force anyone's liquidation. See [Price Index](/concepts/price-index) and [Liquidations](/concepts/liquidations).
 
 ## Venues
 
-Every market carries a `venue` field, and the internal AMM documented above is one of two shipped venues:
+Every market carries a `venue` field. The shipped and current venue is **external**: the token launched on a **[Meteora](https://www.meteora.ag) Dynamic Bonding Curve** and trades in a **DAMM v2 pool**. The market attaches to the existing mint via [`create_external_market`](/reference/instructions#create_external_market), starts directly `Live`, and the mark is oracle-pushed. Liquidity lives in Meteora's audited, Jupiter-routed infrastructure; ***commas*** keeps the synthetic core (index, cash-settled shorts, funding, liquidations, item swaps).
 
-- **Internal**: the program's own curve and AMM. Fixed supply preminted at creation with the mint authority revoked; the mark comes from the pool's own swaps. Everything above applies.
-- **External**: the token launched on **[Meteora](https://www.meteora.ag) Dynamic Bonding Curve** and trades in a **DAMM pool**. The market attaches to the existing mint via [`create_external_market`](/reference/instructions#create_external_market), starts directly `Live`, and the internal curve/AMM instructions reject with `WrongVenue`. Liquidity lives in Meteora's audited, Jupiter-routed infrastructure; ***commas*** keeps the synthetic core (index, shorts, funding, liquidations).
+<Note>
+The **internal** venue (the program's own curve and AMM, with a preminted supply and an on-chain graduation gate) is the retired v1 design. It is superseded by the Meteora path above; new markets launch on Meteora.
+</Note>
 
 Two consequences of the external design:
 
-- **Mark is oracle-pushed.** The program never parses external pool bytes on chain. The price feed (the relayer) computes the pool price from Meteora's public API and pushes it via [`push_mark`](/reference/instructions#push_mark); it lands in the same `mark_ema` smoothing above, and a bad push can only tilt the clamped funding flow, matching the trust already placed in the oracle key for the index.
-- **Treasury reserve for CDP supply.** Both venues run the same fixed-supply path: `open_short` draws tokens from a program-held treasury (`["treasury", market]`) and `repay_burn`/`liquidate` return them. The reserve balance is a physical open-interest ceiling (`TreasuryDepleted`), enforced by token balances rather than a parameter; internal markets premint it, external markets fund it at listing.
+- **Mark is oracle-pushed.** The program never parses external pool bytes on chain. The relayer computes the pool price from Meteora's public API and pushes it via `push_mark`; it lands in the `mark_ema` smoothing above.
+- **The short side is cash-settled.** Shorts never draw tokens from a reserve. They post SOL collateral, and PnL settles in SOL against the index, with the [insurance fund](/concepts/insurance-fund) as the bounded counterparty. Total short open interest is capped by `max_open_interest`. See [Shorts](/concepts/shorts).
 
-Remaining future work on this path is UX-level: launching markets through a ***commas***-branded DBC config key end to end. The on-chain venue system, treasury model, and mark path shipped with v1 and were exercised in the 20-test suite.
-
-<Frame caption="Price impact of a buy against the 100 SOL opening pool; impact halves as the pool deepens.">
-  <img className="hidden dark:block" src="/images/economics/04-amm-impact.png" alt="Price impact of a buy against the 100 SOL opening pool; impact halves as the pool deepens." noZoom />
-  <img className="block dark:hidden" src="/images/economics/04-amm-impact-light.png" alt="Price impact of a buy against the 100 SOL opening pool; impact halves as the pool deepens." noZoom />
+<Frame caption="Price impact of a buy against the pool; impact halves as the pool deepens.">
+  <img className="hidden dark:block" src="/images/economics/04-amm-impact.png" alt="Price impact of a buy against the pool; impact halves as the pool deepens." noZoom />
+  <img className="block dark:hidden" src="/images/economics/04-amm-impact-light.png" alt="Price impact of a buy against the pool; impact halves as the pool deepens." noZoom />
 </Frame>

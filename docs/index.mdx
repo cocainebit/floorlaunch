@@ -6,12 +6,13 @@ title: "Introduction"
   <div className="fl-hero-title">Launch tokens backed by <em>real collectibles</em></div>
   <div className="fl-hero-sub">
     Every ***commas*** token tracks a real collectible market: a graded card
-    or an NFT collection floor. Deposit the real thing into the pool, trade
-    liquid exposure to it, or hedge it flat. No custody, no vault.
+    or an NFT collection floor. Buy the token to go long it, hedge it flat with
+    a cash-settled short, or swap the real item in and out. No custody, no
+    vault, no wrapper.
   </div>
 </div>
 
-On every other launchpad, a token is backed by nothing but attention. On ***commas***, every token is launched **against a real collectible market**. The creator picks the underlying: a specific graded card (a [PSA](https://www.psacard.com) 10 Umbreon VMAX, say) or an NFT collection floor (Mad Lads). Buyers get liquid exposure to that collectible's price, and the token tracks it through a live price feed plus hedger arbitrage. SOL is just the money you pay with; it is never the thing being tracked. One million tokens represent one unit of the collectible: one graded card, or one floor NFT.
+On every other launchpad, a token is backed by nothing but attention. On ***commas***, every token is launched **against a real collectible market**. The creator picks the underlying: a specific graded card (a [PSA](https://www.psacard.com) 10 Umbreon VMAX, say) or an NFT collection floor (Mad Lads). Buyers get liquid exposure to that collectible's price, and the token tracks it through a live oracle index plus funding. The token launches as a [Meteora](https://www.meteora.ag) Dynamic Bonding Curve pool and trades like any Solana token, visible on Axiom, Photon, Solscan, and Jupiter. SOL is just the money you pay with; it is never the thing being tracked. One million tokens represent one unit of the collectible: one graded card, or one floor NFT.
 
 <div className="fl-card-grid">
   <div className="fl-card-wrap">
@@ -62,19 +63,19 @@ On every other launchpad, a token is backed by nothing but attention. On ***comm
     Pick a collectible, set a fee receiver, deploy. About a minute.
   </Card>
   <Card title="Buy a token" icon="arrow-down-to-line" href="/guides/quickstart/buy-a-token">
-    Pay with SOL, or deposit a real copy of the collectible.
+    Pay with SOL through Jupiter, or swap in a real copy of the collectible.
   </Card>
   <Card title="Sell a token" icon="arrow-up-from-line" href="/guides/quickstart/sell-a-token">
-    Exit to SOL on the curve or the AMM, no gates.
+    Exit to SOL on the Meteora pool, routed by Jupiter, no gates.
   </Card>
   <Card title="Take out the card" icon="package-open" href="/guides/quickstart/redeem-a-card">
-    Redeem tokens for a real copy from the market's escrow.
+    Swap tokens for a real copy from the market's item reserve.
   </Card>
 </CardGroup>
 
 <CardGroup cols={2}>
   <Card title="Economics" icon="scale" href="/guides/economics">
-    How token demand becomes a supply sink for the real collectible.
+    How the funding tether, fees, and item swaps hold a token to its collectible.
   </Card>
   <Card title="Contract safety" icon="shield-check" href="/guides/contract-safety">
     The failure modes that kill launchpads, and how each is closed.
@@ -92,47 +93,47 @@ On every other launchpad, a token is backed by nothing but attention. On ***comm
     A market is listed for one underlying: one card at one grade, a basket of cards, or one NFT collection's floor.
   </Step>
   <Step title="The market gets a price feed">
-    A signed feed reads the collectible's real prices from marketplaces ([eBay](https://www.ebay.com) and [TCGplayer](https://www.tcgplayer.com) aggregates, [Collector Crypt](https://collectorcrypt.com), [Magic Eden](https://magiceden.io)), filters manipulation, and writes the result on chain.
+    A signed oracle reads the collectible's real price ([Collector Crypt](https://collectorcrypt.com) floors for graded cards, live [Magic Eden](https://magiceden.io) floors for NFT collections), converts to SOL, and writes the result on chain as the market's index.
   </Step>
-  <Step title="The token launches on a curve">
-    Anyone can buy from the first block; the launch works like any memecoin curve: every token opens at a 25 SOL market cap and auto-migrates to the AMM once the curve has raised 100 SOL, so the pool starts with 100 SOL of liquidity inside it.
+  <Step title="The token launches as a Meteora DBC pool">
+    commas creates a fresh SPL mint (fixed 1,000,000,000 supply, mint authority revoked) and a [Meteora](https://www.meteora.ag) Dynamic Bonding Curve pool. Anyone can buy from the first block through Jupiter; as the curve fills it migrates to a Meteora DAMM v2 pool.
   </Step>
   <Step title="The token tracks the collectible">
-    Funding and hedger arbitrage pull the token's price toward the collectible's price, up and down. Card doubles, your exposure doubles.
+    Funding pulls the token's pool price toward the collectible's oracle index, up and down. Card doubles, your exposure doubles.
   </Step>
 </Steps>
 
-The protocol custodies nothing to back the token. There is no mandatory vault, no redemption queue, and no pooled collateral priced by an oracle. The tether comes from two forces instead: collateralized reserve arbitrage against the index (drawing fixed-supply tokens from a program treasury and returning them), and a clamped funding rate that pays whichever side pulls price back toward it. Every synth is a fixed-supply SPL token whose mint authority is revoked at creation. On top of that, markets can run an [item pool](/concepts/synth-token#item-swaps): holders of vaulted on-chain copies of the underlying deposit a copy and receive tokens of equal value, and anyone can swap tokens back for a copy, so the collectible's own supply becomes liquidity without ever being what the token's solvency depends on.
+The protocol custodies nothing to back the token. There is no mandatory vault, no redemption queue, and no pooled collateral priced by an oracle. The token *is* the collectible's price and identity: on-chain [Metaplex metadata](/concepts/synth-token#identity) brands the mint as the collectible so it renders as the underlying on Solscan and terminals, and an on-chain oracle index carries the collectible's price. The tether to that index comes from a **clamped funding rate** and from **cash-settled shorts**, the same shape that pegs a perpetual future, applied to a token. Every token is a fixed-supply SPL mint (1,000,000,000, all tradeable) whose mint authority is revoked at creation. On top of that, markets can run an [item swap](/concepts/synth-token#item-swaps): a holder of the designated collectible swaps the real item for tokens at the oracle value (and back), so the collectible has an on-chain door in and out without being what the token's solvency depends on.
 
 <Note>
-***commas*** is live on Solana mainnet: the program, oracle relayer, item swaps, and external-venue ([Meteora](https://www.meteora.ag)) support all run in production. Program ID: `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`. Additional graded-card API sources are planned work; pages that describe them say so explicitly.
+***commas*** is live on Solana mainnet. Program ID: `QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9WjijM9BjM`. The Meteora DBC venue replaces the retired internal bonding curve. NFT floors read live from [Magic Eden](https://magiceden.io); graded-card prices are operator-attested, seeded from [Collector Crypt](https://collectorcrypt.com) floors and converted through [Pyth](https://pyth.network) SOL/USD (a fully automated graded feed is planned, not live: pages that touch it say so).
 </Note>
 
 ## Who it's for
 
-- **Longs.** Anyone who wants price exposure to a PSA 10 card or a blue-chip NFT floor without buying, storing, grading, or insuring the real thing. Buy the synth on the launch curve or the AMM; sell it whenever you like.
-- **Hedgers (the natural shorts).** Holders of the underlying can post SOL collateral, draw synth from the reserve at the index, and sell it, locking in today's price without selling their card or NFT. They are structurally motivated to supply the short side, which is what most floor-derivative designs lack.
-- **Liquidators and crankers.** Funding accrual and liquidations are permissionless. Keepers earn a liquidation bonus for closing undercollateralized shorts.
+- **Longs.** Anyone who wants price exposure to a PSA 10 card or a blue-chip NFT floor without buying, storing, grading, or insuring the real thing. Buy the token on the Meteora pool through Jupiter; sell it whenever you like.
+- **Hedgers (the natural shorts).** Holders of the underlying can post SOL collateral and open a **cash-settled short**: their PnL settles in SOL against the oracle index, so they lock in today's price without selling their card or NFT. They are structurally motivated to supply the short side, which is what most floor-derivative designs lack.
+- **Liquidators and crankers.** Funding accrual and liquidations are permissionless. Keepers earn a bonus for closing undercollateralized shorts.
 
 ## Why this design
 
 Every earlier attempt at collectible price exposure died in one of two ways: vault models (fractionalization) filled with the worst items and amplified crashes, and oracle-settled perps got drained the first time someone manipulated a thin floor print. ***commas*** is shaped around those failure modes:
 
-- **No vault dependency.** The token's solvency never rests on custodied items, so there is nothing to fill with lemons and no reflexive redemption spiral. The optional [item pool](/concepts/synth-token#item-swaps) escrows only admin-registered copies of the exact card+grade (fungible by construction) and prices every swap at live value, so it cannot be gamed by dumping inferior items at a fixed rate.
-- **Bounded oracle damage.** A bad index print cannot unlock anyone's funds. It can only tilt the funding rate, which is clamped per day, and a print that deviates too far from the TWAP trips a circuit breaker that freezes the market.
-- **A bounded hedge facility.** Each market premints a fixed hedge reserve that hedgers draw against collateral, sized against the real depth of the collectible's market. When the reserve is empty the facility is simply full, so the synthetic can never grow large enough to become the price setter for its own underlying.
+- **No vault dependency.** The token's solvency never rests on custodied items, so there is nothing to fill with lemons and no reflexive redemption spiral. The optional [item swap](/concepts/synth-token#item-swaps) accepts only admin-registered copies of the exact card+grade (fungible by construction) and prices every swap at live value, so it cannot be gamed by dumping inferior items at a fixed rate.
+- **Bounded oracle damage.** A bad index print cannot unlock anyone's funds. It can only tilt the funding rate, which is clamped per day, and a print that deviates too far from the TWAP trips a circuit breaker that freezes the commas-side machinery.
+- **A bounded counterparty.** The short side settles against a per-market [insurance fund](/concepts/insurance-fund), and total short open interest is capped by `max_open_interest`, sized against the real depth of the collectible's market. The synthetic can never grow large enough to become the price setter for its own underlying.
 
 ## Where to go next
 
 <CardGroup cols={2}>
   <Card title="How it works" icon="route" href="/how-it-works">
-    The full market lifecycle, from listing through launch, graduation, and live trading.
+    The full market lifecycle, from listing through the Meteora launch to live trading.
   </Card>
   <Card title="Asset classes" icon="layers" href="/asset-classes">
     Why graded cards are the flagship underlying and how NFT floors differ.
   </Card>
   <Card title="Funding" icon="scale" href="/concepts/funding">
-    The mechanism that tethers the synth to the index without redemption.
+    The mechanism that tethers the token to the index without redemption.
   </Card>
   <Card title="Instruction reference" icon="code" href="/reference/instructions">
     Every program instruction, its arguments, and its accounts.

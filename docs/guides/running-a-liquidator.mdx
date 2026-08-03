@@ -1,48 +1,47 @@
 ---
 title: "Running a Liquidator"
-description: "Keeper guide: monitor short positions, liquidate underwater ones, and run the funding crank."
+description: "Keeper guide: monitor short positions, liquidate underwater ones cash-only, and run the funding crank."
 ---
 
-Liquidations on ***commas*** are permissionless. Anyone who holds enough synth
-to cover a position's debt can liquidate it once it falls below maintenance
-collateral, and earn a bonus for doing so. Keepers also run the
-permissionless funding crank. This page covers both jobs.
+Liquidations on ***commas*** are permissionless and **cash-only**. Anyone can
+close a short once it falls below maintenance collateral and earn a SOL bonus
+for doing so; you need no token inventory and no upfront capital beyond
+transaction fees. Keepers also run the permissionless funding crank. This page
+covers both jobs.
 
 ## Watching positions
 
-Every short is a `ShortPosition` account at a program-derived address (`["short", market, owner]`). Fetch all
-of them per market with `getProgramAccounts` filtered on the account
-discriminator and the market field, then compute each position's health:
+Every short is a `ShortPosition` account at a program-derived address
+(`["short", market, owner]`). Fetch all of them per market with
+`getProgramAccounts` filtered on the account discriminator and the market
+field, then compute each position's health:
 
 ```
-current_debt  = debt_scaled * market.funding_index / 1e12   (base units)
-debt_value    = current_debt * market.index_twap / 1e12     (lamports)
-liquidatable  = collateral * 10000 < debt_value * maintenance_cr_bps
+notional_value = size * market.index_twap / 1e12     (lamports)
+liquidatable   = collateral * 10000 < notional_value * maintenance_cr_bps
 ```
 
-Both `funding_index` and `index_twap` live on the `Market` account, so one
+`size` is the position's short notional; funding is folded into its settleable
+PnL. `funding_index` and `index_twap` both live on the `Market` account, so one
 market fetch prices every position in it. Re-check after every oracle push
 (subscribe to the market account or the `IndexPushed` event) since index
 moves, not time, are what push positions underwater.
 
 ## Executing a liquidation
 
-The liquidator repays the position's full debt from their own wallet (the
-tokens return to the market's treasury reserve), so you need synth inventory
-first. Buy it from the [AMM](/concepts/amm) in the same
-transaction or hold a standing balance.
+Liquidation is cash-only: no synth to buy, no reserve to return tokens to. You
+call `liquidate()` and are paid a SOL bonus.
 
 ```typescript
 await program.methods
   .liquidate()
   .accountsPartial({
     market: marketPda,
-    synthMint: mintPda,
     solVault: vaultPda,
+    insurance: insurancePda,
     position: shortPda,            // ["short", market, victimOwner]
     positionOwner: victimOwner,    // receives any collateral remainder
     liquidator: wallet.publicKey,
-    liquidatorAta: getAssociatedTokenAddressSync(mintPda, wallet.publicKey),
   })
   .rpc();
 ```
@@ -50,37 +49,35 @@ await program.methods
 What you receive, in lamports:
 
 ```
-target = debt_value * (1 + liq_bonus_bps / 10000)
-payout = min(target, collateral)
-       + insurance top-up if collateral < target (bounded by the insurance fund)
+bonus  = notional_value * liq_bonus_bps / 10000
+payout = min(bonus, collateral remaining after the loss is settled)
+       + insurance top-up if that remainder is short of the bonus
 ```
 
-If the collateral more than covers the target, the remainder is refunded to
-the position owner. v1 liquidations are full: the entire debt is repaid in one
-call, there is no partial close.
+The position's underwater loss is settled into the insurance fund, your bonus
+is paid from collateral (topped up by the fund if needed), and any remainder is
+refunded to the position owner. v1 liquidations are full: the entire position
+closes in one call, there is no partial close.
 
 ## Economics
 
-Your gross margin per liquidation is the bonus (`liq_bonus_bps`, for example
-5% of debt value) minus:
+Your margin per liquidation is the SOL bonus (`liq_bonus_bps`, for example
+5% of the position's index-valued notional) minus transaction fees (negligible
+on Solana). Because liquidation is cash-only, there is **no synth to acquire**,
+so no AMM slippage and no inventory or direction risk in sourcing tokens: the
+profit is simply the bonus.
 
-- AMM slippage and fee when acquiring the synth to repay with. For large positions
-  this is the dominant cost; check pool depth against position size before
-  committing.
-- Transaction fees (negligible on Solana).
-- Inventory risk if you pre-hold synth between opportunities.
-
-Because the repay amount is the full debt, large positions in shallow pools can
-be unprofitable to liquidate even when technically eligible. The
-[insurance fund](/concepts/insurance-fund) covers collateral shortfalls, not
-your execution costs.
+The one caveat is a deeply underwater position whose collateral cannot cover
+the bonus: then you depend on the [insurance fund](/concepts/insurance-fund)
+for the top-up, and an exhausted fund means a partial bonus. Watch the fund's
+`insurance_lamports` and prefer markets that are seeded.
 
 ## Running the funding crank
 
-`accrueFunding()` is permissionless and takes only the market account. It
-updates the mark EMA and applies the clamped funding rate to the global
-funding index. It rejects calls more frequent than
-`min_crank_interval_secs` with `CrankTooSoon`.
+`accrueFunding()` is permissionless and takes only the market account. It reads
+the pushed mark, applies the clamped funding rate to the global funding index,
+and rejects calls more frequent than `min_crank_interval_secs` with
+`CrankTooSoon`.
 
 ```typescript
 await program.methods
@@ -91,12 +88,12 @@ await program.methods
 
 Crank every market on a timer slightly above the minimum interval. There is no
 direct payment for cranking in v1; keepers run it because stale funding delays
-the debt drift that creates liquidation opportunities, and because a live
+the PnL drift that creates liquidation opportunities, and because a live
 funding index keeps position math (and therefore your monitoring) accurate.
 
 <Note>
 Liquidation and the crank both require the market to be `Live` and not frozen,
-and liquidation requires a nonzero index. During a
+and both require a fresh index. During a
 [circuit breaker](/concepts/circuit-breaker) freeze, positions cannot be
 liquidated; expect a queue of eligible positions when the market unfreezes,
 and price the reopening race accordingly.

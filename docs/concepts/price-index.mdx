@@ -1,9 +1,9 @@
 ---
 title: "Price Index"
-description: "How the on-chain floor price index is fed, smoothed, and consumed by every risk check in the protocol"
+description: "How the on-chain collectible price index is fed, smoothed, and consumed by every risk check in the protocol"
 ---
 
-Every market carries an on-chain **price index**: the protocol's view of what one whole unit of the synth (1,000,000 tokens) is worth, denominated in **lamports per unit**. The index is **launch-scaled**: at launch, one unit is defined as worth 0.625 SOL, the [launch curve](/concepts/launch-curve)'s migration price, and every push moves it proportionally with the collectible from there:
+Every market carries an on-chain **price index**: the protocol's view of what one whole unit of the token (1,000,000 tokens) is worth, denominated in **lamports per unit**. The index is **launch-scaled**: at launch, one unit's index is set equal to the token's launch price per unit on the [Meteora](https://www.meteora.ag) pool, and every push moves it proportionally with the collectible from there:
 
 <Frame caption="Two estimator pipelines, one launch-scaled index.">
   <img className="hidden dark:block" src="/images/protocol/11-oracle-pipelines.png" alt="Two estimator pipelines, one launch-scaled index." noZoom />
@@ -11,16 +11,16 @@ Every market carries an on-chain **price index**: the protocol's view of what on
 </Frame>
 
 ```text
-pushed = collectible_price_now / collectible_price_at_launch * 0.625 SOL
+pushed = collectible_price_now / collectible_price_at_launch * index_at_launch
 ```
 
-The index therefore carries the collectible's move since launch rather than its absolute price, which keeps premium, [funding](/concepts/funding), the [breaker](/concepts/circuit-breaker), and CDP math on the same footing for every market, and seeds the AMM at zero premium at [graduation](/concepts/graduation). The index is the reference that everything else keys off: collateral checks, liquidations, and the funding rate that tethers the synth price.
+The index therefore carries the collectible's move since launch rather than its absolute price, which keeps premium, [funding](/concepts/funding), the [breaker](/concepts/circuit-breaker), and short collateral math on the same footing for every market, and opens the market at roughly zero premium to the pool. The index is the reference that everything else keys off: collateral checks, liquidations, and the funding rate that tethers the token price.
 
 ## Push oracle
 
-The index is fed by a push oracle. The market's price feed, a signed relayer service that reads the collectible's real prices from marketplaces and filters manipulation (see [Oracle Architecture](/oracle/architecture)), submits it with the `push_index` instruction, signed by the **oracle authority** key stored in the global config. No other signer can push.
+The index is fed by a push oracle. The market's price feed, a signed relayer service that reads the collectible's real price (live [Magic Eden](https://magiceden.io) floors for NFTs; operator-attested [Collector Crypt](https://collectorcrypt.com) floors for graded cards, converted through [Pyth](https://pyth.network); see [Oracle Architecture](/oracle/architecture)), submits it with the `push_index` instruction, signed by the **oracle authority** key stored in the global config. No other signer can push.
 
-Each push carries a single `price_lamports` value for the whole unit, already launch-scaled by the feed. The first push at launch is `625_000_000` (0.625 SOL); for a collectible that has since doubled, the push is `1_250_000_000`.
+Each push carries a single `price_lamports` value for the whole unit, already launch-scaled by the feed. The first push at launch sets the index at parity with the token's launch price per unit; for a collectible that has since doubled, the push is double that.
 
 Four gates apply before a push is absorbed:
 
@@ -48,7 +48,7 @@ index_twap = (index_twap * (w - dt) + price * dt) / w
 If the full window has elapsed since the last push, the TWAP lands exactly on the new observation. Rapid-fire pushes move it only fractionally, so no single print can jerk the index.
 
 <Note>
-The very first push for a market seeds `index_twap` directly with the observed price. There is no history to average against yet, and most instructions refuse to run until an index exists.
+The very first push for a market seeds `index_twap` directly with the observed price. There is no history to average against yet, and most risk instructions refuse to run until an index exists.
 </Note>
 
 ## What consumes the index
@@ -59,18 +59,18 @@ The index is the valuation leg for every solvency computation. Token amounts are
 value = base_units * index_twap / 1_000_000_000_000
 ```
 
-(1e12 base units per whole unit, see [The Synth Token](/concepts/synth-token).)
+(1e12 base units per whole unit, see [The Token](/concepts/synth-token).)
 
 | Consumer | How it uses the index |
 | --- | --- |
-| `open_short` | New debt is valued at the index; collateral must cover `initial_cr_bps` of it |
-| `withdraw_collateral` | Remaining collateral is re-checked against debt valued at the index |
-| `liquidate` | Positions become liquidatable when collateral falls below `maintenance_cr_bps` of index-valued debt; payouts are index-valued |
+| `open_short` | New notional is valued at the index; collateral must cover `initial_cr_bps` of it |
+| `withdraw_collateral` | Remaining collateral is re-checked against notional valued at the index |
+| `close_position` | PnL is `size * (index_entry - index_twap) / 1e12`, settled in SOL |
+| `liquidate` | Positions become liquidatable when collateral falls below `maintenance_cr_bps` of index-valued notional; payouts are index-valued |
 | `accrue_funding` | The premium is `(mark_ema - index_twap) / index_twap`; with a launch-scaled index it reads as how the token has done versus the collectible since launch. See [Funding](/concepts/funding) |
-| `graduate` | Refuses to run until an index exists |
 
 <Warning>
-The AMM's own price (the mark) never enters a collateral or liquidation check. Only the oracle index does. Manipulating the on-chain pool cannot force a liquidation; only the external market price, as reported through the smoothed and breaker-guarded index, can.
+The pool's own price (the mark) never enters a collateral or liquidation check. Only the oracle index does. Manipulating the Meteora pool cannot force a liquidation; only the external collectible price, as reported through the smoothed and breaker-guarded index, can.
 </Warning>
 
 ## Staleness guard
@@ -78,11 +78,12 @@ The AMM's own price (the mark) never enters a collateral or liquidation check. O
 An index is only as good as its freshness. Every market records `index_last_ts`, the time of the last accepted push, and when `max_index_age_secs` is set (non-zero), index-priced operations refuse to run against an index older than that:
 
 - `open_short`
-- `withdraw_collateral` when the position still has debt
+- `withdraw_collateral` while the position is open
+- `close_position`
 - `accrue_funding`
 - `liquidate`
 
-A stale market returns `IndexStale` until the next accepted push, at which point everything resumes with no reset needed. Trading (curve and AMM), `repay_burn`, and `add_collateral` stay available throughout, so nobody is trapped: shorts can still de-risk, and holders can still exit through the pool.
+A stale market returns `IndexStale` until the next accepted push, at which point everything resumes with no reset needed. Trading on Meteora (out of commas' control) and `add_collateral` stay available throughout, so nobody is trapped: holders can still exit through the pool, and shorts can still make their position safer.
 
 This bounds the damage of a dead relayer: prices stop being trusted after the configured age instead of being trusted forever. Set `max_index_age_secs` comfortably above the relayer's push cadence (see [Parameters](/concepts/parameters)); `0` disables the guard, which is only appropriate for testing.
 
@@ -92,4 +93,4 @@ This bounds the damage of a dead relayer: prices stop being trusted after the co
 - Emits `IndexPushed { market, raw, twap }` on absorption, or `BreakerTripped { market, observed, twap }` on a breaker hit, see [Events](/reference/events)
 - State fields: `index_twap`, `index_last_raw`, `index_last_ts` on the [Market account](/reference/accounts)
 
-External-venue markets additionally receive an oracle-pushed **mark** price through [`push_mark`](/reference/instructions#push_mark), smoothed the same way over `mark_window_secs`. The mark only steers [funding](/concepts/funding); it never enters collateral or liquidation math, which always use the index documented here.
+Every market also receives an oracle-pushed **mark** price through [`push_mark`](/reference/instructions#push_mark), the live Meteora pool price, smoothed the same way over `mark_window_secs`. The mark only steers [funding](/concepts/funding); it never enters collateral or liquidation math, which always use the index documented here.

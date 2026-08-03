@@ -1,18 +1,18 @@
 ---
 title: "Funding"
-description: "The clamped funding rate that tethers the synth's market price to the oracle index."
+description: "The clamped funding rate that tethers the token's pool price to the oracle index."
 ---
 
-***commas*** has no redemption of synth for the underlying asset. The link between the token's market price and the [price index](/concepts/price-index) is economic: a funding rate continuously transfers value between the two sides of the market until arbitrage pulls the prices back together. This is the same mechanism that pegs perpetual futures, applied to a token.
+***commas*** has no redemption of the token for the underlying asset. The link between the token's pool price and the [price index](/concepts/price-index) is economic: a funding rate continuously transfers value between the two sides of the market until arbitrage pulls the prices back together. This is the same mechanism that pegs perpetual futures, applied to a token.
 
-<Frame caption="Funding rate versus premium, clamped at 100 percent per day.">
-  <img className="hidden dark:block" src="/images/protocol/16-funding-curve.png" alt="Funding rate versus premium, clamped at 100 percent per day." noZoom />
-  <img className="block dark:hidden" src="/images/protocol/16-funding-curve-light.png" alt="Funding rate versus premium, clamped at 100 percent per day." noZoom />
+<Frame caption="Funding rate versus premium, clamped per day.">
+  <img className="hidden dark:block" src="/images/protocol/16-funding-curve.png" alt="Funding rate versus premium, clamped per day." noZoom />
+  <img className="block dark:hidden" src="/images/protocol/16-funding-curve-light.png" alt="Funding rate versus premium, clamped per day." noZoom />
 </Frame>
 
 ## The rate
 
-Funding compares the mark price (an EMA, never spot: fed by the internal AMM on internal-venue markets and by the oracle-pushed [`push_mark`](/reference/instructions#push_mark) on external-venue markets; see [AMM](/concepts/amm)) to the index TWAP:
+Funding compares the mark price (an EMA, never spot: oracle-pushed from the live [Meteora](https://www.meteora.ag) pool via [`push_mark`](/reference/instructions#push_mark); see [AMM & Mark Price](/concepts/amm)) to the index TWAP:
 
 ```
 premium_bps      = (mark_ema - index_twap) * 10_000 / index_twap
@@ -27,30 +27,30 @@ rate_bps_per_day = clamp(premium_bps * funding_k_bps / 10_000,
 
 Anyone can call `accrue_funding` (a permissionless crank), rate-limited by `min_crank_interval_secs` and gated on index freshness (a market past `max_index_age_secs` without a push returns `IndexStale`; funding must never accrue against a price the oracle stopped standing behind, see the [staleness guard](/concepts/price-index#staleness-guard)). The crank:
 
-1. Refreshes the mark: from the current AMM reserves on internal markets; on external markets it instead requires a pushed mark to exist (`NoMark`) and to be fresh within `max_index_age_secs` (`IndexStale`).
+1. Requires a fresh pushed mark to exist (`NoMark`) and to be fresh within `max_index_age_secs` (`IndexStale`).
 2. Computes the clamped rate above.
 3. Applies it, pro-rated by elapsed time, to the market's global `funding_index` (a fixed-point multiplier, `FUNDING_ONE = 1e12`).
 
 The elapsed time in step 3 is capped at **one day per crank**. A crank that arrives late forfeits the excess interval instead of applying the current premium retroactively to an unbounded gap, and the cap also guarantees the linear step can never zero the funding index (an uncapped day-plus gap at the full clamp could have, permanently bricking funding; fixed in the 2026-07-24 adversarial review).
 
-Every short position stores its debt divided by the funding index at touch time, so a single update to `funding_index` reprices all debt at once. See [Shorts](/concepts/shorts) for the exact scaling.
+Every open [short](/concepts/shorts) snapshots the funding index at its last touch, so a single update to `funding_index` applies funding to all shorts at once, landing in each position's settleable PnL.
 
 ## Direction
 
 | Market state | Funding flow | Intended effect |
 | --- | --- | --- |
-| Mark above index | Short debt shrinks (`funding_index` falls) | Shorts are paid to draw from the reserve and sell; new circulating supply pushes the mark down |
-| Mark below index | Short debt grows (`funding_index` rises) | Shorts buy back cheap synth and repay it to the reserve; buy pressure lifts the mark |
+| Mark above index | Shorts are credited (`funding_index` moves in their favor) | Shorts are paid to hold the tether side while the token trades rich; hedgers open cash-settled shorts against the rich mark |
+| Mark below index | Shorts are debited (`funding_index` moves against them) | Shorts are charged while the token trades cheap, pushing them to close; the long side collects that flow and bids the mark back up |
 
-Together with reserve draw/repay arbitrage (drawing at the index is profitable when the mark is rich; repaying at the index is profitable when the mark is cheap), this pulls the mark toward the index from both sides.
+The funding flow between shorts and the [insurance fund](/concepts/insurance-fund) (the bounded counterparty) is what makes the short side willing to lean against the mark from both directions.
 
 <Note>
-The tether is soft. Funding drifts the price toward the index; it does not pin it there. Expect a persistent basis of a few percent in normal conditions, wider in stressed ones.
+The tether is soft. Funding drifts the pool price toward the index; it does not pin it there. Expect a persistent basis of a few percent in normal conditions, wider in stressed ones.
 </Note>
 
-## Where funding settles in v1
+## Where funding settles
 
-v1 applies funding purely as a debt adjustment on shorts, with the [insurance fund](/concepts/insurance-fund) as the system backstop at liquidation time. Token holders are not directly charged or paid; their side of the flow is implicit in the arbitrage pressure on the mark. A staked long pool that explicitly receives and pays funding is planned for v2 (see [Roadmap](/roadmap)).
+Funding accrues to open [cash-settled shorts](/concepts/shorts) and settles through the [insurance fund](/concepts/insurance-fund), the market's bounded counterparty: value that funding grants a short is paid from the fund at close, and value it charges a short is paid into the fund. Token holders are not directly debited or credited; their side of the flow is the incentive to bid the mark when shorts are being charged. A staked long pool that explicitly receives and pays funding is planned for v2 (see [Roadmap](/roadmap)).
 
 ## Why the clamp matters for security
 
@@ -60,4 +60,4 @@ Because there is no oracle-priced redemption, a manipulated index print cannot d
 max damage per day <= total_open_interest * max_funding_bps_per_day / 10_000
 ```
 
-A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short debt is bounded by the finite [hedge reserve](/concepts/parameters). The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason ***commas*** can reference thin external markets at all.
+A manipulator must also keep the bad print alive across the index TWAP window while the [circuit breaker](/concepts/circuit-breaker) watches for deviation, and total short open interest is bounded by `max_open_interest`. The result is that oracle manipulation is a bounded, slow leak rather than an event. This property is the reason ***commas*** can reference thin external markets at all.

@@ -1,31 +1,31 @@
 ---
-title: "The Synth Token"
-description: "Unit math, fixed supply with a revoked mint, value-based item swaps, and what backs each tranche"
+title: "The Token"
+description: "Unit math, a fixed 1B external SPL mint with a revoked authority, the collectible identity, and value-based item swaps"
 ---
 
-Each market issues one SPL token, the **synth**. It is a completely standard SPL mint: it sits in associated token accounts, transfers freely, and composes with any wallet or protocol that speaks SPL. What makes it a synthetic is not the token itself but the machinery around it.
+Each market issues one SPL token. It is a completely standard SPL mint: it sits in associated token accounts, transfers freely, trades on [Meteora](https://www.meteora.ag) through Jupiter, and composes with any wallet or protocol that speaks SPL. What makes it track a collectible is not the token itself but the machinery around it: the oracle index, the funding tether, and its on-chain identity.
 
-<Frame caption="The supply ledger: preminted once, then only moves or shrinks.">
-  <img className="hidden dark:block" src="/images/protocol/14-supply-ledger.png" alt="The supply ledger: preminted once, then only moves or shrinks." noZoom />
-  <img className="block dark:hidden" src="/images/protocol/14-supply-ledger-light.png" alt="The supply ledger: preminted once, then only moves or shrinks." noZoom />
+<Frame caption="The supply ledger: minted once at 1B, authority revoked, then only moves.">
+  <img className="hidden dark:block" src="/images/protocol/14-supply-ledger.png" alt="The supply ledger: minted once at 1B, authority revoked, then only moves." noZoom />
+  <img className="block dark:hidden" src="/images/protocol/14-supply-ledger-light.png" alt="The supply ledger: minted once at 1B, authority revoked, then only moves." noZoom />
 </Frame>
 
 ## Fixed supply, mint revoked
 
-Every ***commas*** token is a **fixed-supply SPL token with a revoked mint authority**, on both venues.
+Every ***commas*** token is a **fixed-supply SPL token with a revoked mint authority**.
 
-On the internal venue:
-
-- The mint lives at a program-derived address (seeds `["mint", market]`), so each market has exactly one deterministic mint address; see [PDAs](/reference/pdas).
-- `create_market` premints the entire allocation in the creation transaction: the curve allocation (`curve_virtual_tokens`) into the pool account, the hedging reserve (`max_open_interest`) into the treasury, and the [item-swap reserve](#item-swaps) (`item_reserve`, when configured) into the item reserve account, then **permanently revokes the mint authority** (`SetAuthority` to none). Wallets and screeners show the mint as revoked from the first block.
-- Nothing can ever mint again. After creation, tokens only move between accounts, and the one burn in the system (unsold curve allocation at [graduation](/concepts/graduation)) means supply can only shrink.
+- The mint is created by the [Meteora](https://www.meteora.ag) DBC launch with a **fixed 1,000,000,000 supply**, no premint on top: the whole supply is the tradeable float in the pool. The mint is recorded on the market as `Market.synth_mint`; the program holds no mint authority over it.
+- The mint authority is **revoked** at creation, so wallets and screeners show the mint as revoked from the first block. Nothing can ever mint again.
+- Supply is fixed at 1B for the life of the market. There is no elastic, program-minted supply and no burn: tokens only move between accounts.
 - Decimals: 6.
 
-On the external venue the mint is whatever the external launch ([Meteora](https://www.meteora.ag) DBC) created, recorded as `Market.synth_mint`; supply is likewise fixed and the program holds no mint authority. See [What backs each tranche](#what-backs-each-tranche) below and [Venues](/concepts/amm#venues).
-
 <Note>
-The hedging facility is a preminted supply allocation, like a locked reserve in any launch's tokenomics. It is not an inflation mechanism: drawing from it moves existing tokens into circulation, and repayments move them back out.
+This replaces the retired v1 model, where the program preminted around 1.6B tokens across an internal curve allocation, a hedge reserve, and an item reserve, then burned the unsold curve excess. The Meteora path is a clean **fixed 1B**, all of it tradeable.
 </Note>
+
+## Identity: the token is the collectible
+
+The mint's on-chain Metaplex metadata points at commas' `/token-metadata` JSON, which carries the collectible's **name, image, and an "Underlying" / "Collectible ID" attribute set**. That is what makes Solscan and terminals render the token *as* the collectible, and it is how "the underlying is the collectible" shows up publicly. The identity is metadata plus oracle, not custody: the pool holds SOL and the token, not the physical item. See [What commas is not](/faq).
 
 ## Unit math
 
@@ -35,84 +35,54 @@ The scale constant for every market:
 1 unit = 1,000,000 tokens = 1e12 base units
 ```
 
-The unit is **launch-scaled**: at launch, one unit is defined as worth 0.625 SOL, the curve's migration price, and the [Price Index](/concepts/price-index) moves it proportionally with the collectible from there. Since the index is quoted in lamports per whole unit:
+The unit is **launch-scaled**: at launch, one unit's index is set equal to the token's launch price per unit, and the [Price Index](/concepts/price-index) moves it proportionally with the collectible from there. Since the index is quoted in lamports per whole unit:
 
 ```text
 index_per_base_unit = index_lamports / 1e12
 value(base_units)   = base_units * index_lamports / 1e12
 ```
 
-Worked example: a market launches against a card trading at 6.25 SOL. The index opens at `625_000_000` lamports per unit, and one card equals ten units at launch (`units_per_item_micro = 10_000_000`; see [item swaps](#item-swaps)). If the card doubles, the pushed index doubles to 1.25 SOL per unit and one token (1e6 base units) is worth `1.25e9 * 1e6 / 1e12` lamports, or 0.00000125 SOL. The million-to-one split keeps the per-token price in memecoin territory; the launch scaling keeps every market's unit on the same footing regardless of how expensive the collectible is.
+Worked example: a market launches against a card and the index opens at some lamports-per-unit value `P`. If the card doubles, the pushed index doubles to `2P` per unit and one token (1e6 base units) is worth `2P * 1e6 / 1e12` lamports. The million-to-one split keeps the per-token price in memecoin territory; the launch scaling keeps premium and funding meaningful for every market regardless of how expensive the collectible is.
 
-## Where circulating supply comes from
+## Where circulating supply lives
 
-Total supply is fixed at creation; what moves is how much of it circulates. Every path is a transfer between program accounts and wallets:
+The full 1B is minted into the [Meteora](https://www.meteora.ag) pool at launch and is the tradeable float from block one. There is no program-held reserve backing shorts, because shorts are [cash-settled](/concepts/shorts): they never draw or return tokens. The only program-held token account is the optional **item reserve**, funded by a plain SPL transfer at listing time:
 
 | Path | Direction | When |
 | --- | --- | --- |
-| `curve_buy` | pool allocation to buyer | Bootstrap phase |
-| `curve_sell` | seller back to pool allocation | Bootstrap phase |
-| `graduate` | pool keeps the AMM seed, **burns the unsold excess** | once |
-| `open_short` | treasury reserve to shorter | Live, against SOL collateral |
-| `repay_burn` | shorter back to treasury reserve | Live, retiring CDP debt |
-| `liquidate` | liquidator back to treasury reserve | Live, retiring a defaulted position's debt |
+| pool buy/sell (Meteora, via Jupiter) | pool ⇄ trader | Any time the pool is live |
 | `deposit_item` | item reserve to depositor | Live, against a registered copy entering escrow |
 | `withdraw_item` | holder back to item reserve | Live, taking a copy out of escrow |
 
-AMM swaps move existing tokens between the pool and traders; nothing in the live market changes supply.
-
-Both venues run the identical CDP path: `open_short` draws from `["treasury", market]`, while `repay_burn` and `liquidate` return tokens to it. The treasury balance is the market's physical open-interest ceiling (`TreasuryDepleted`). On the internal venue the reserve is preminted at creation; on the external venue it is funded by a plain SPL transfer at listing time.
-
-Post-graduation supply on the internal venue is exactly:
-
-```text
-supply = tokens sold on the curve + AMM seed + hedging reserve + item reserve
-```
-
-## What backs each tranche
-
-The circulating supply has three economically distinct tranches:
-
-1. **Curve and AMM supply**: tokens sold on the curve plus the graduation pool seed. These are backed by the SOL sitting in the market vault (the raise and the AMM reserve), like any launchpad token. Sellers exit against that SOL through the pool.
-2. **CDP supply**: tokens drawn from the treasury reserve by `open_short`. Every one of these is backed by a specific shorter's SOL collateral at no less than `initial_cr_bps` (150% by default) of index value at draw time, defended by [liquidations](/concepts/liquidations) below `maintenance_cr_bps`.
-3. **Item-swap supply**: tokens released from the item reserve by `deposit_item`. Every batch entered circulation against a real copy of the underlying that now sits in the market's escrow, and anyone can reverse the trade by returning equal value in tokens for a copy.
-
-<Note>
-The tranches are fungible in your wallet; a token does not know which path released it. The distinction matters for reasoning about system solvency: CDP supply has a named debtor who must buy it back or be liquidated, curve supply does not.
-</Note>
+Pool swaps move existing tokens between the Meteora pool and traders; item swaps move existing tokens between the item reserve and holders. Nothing in the system mints or burns, so supply is exactly 1,000,000,000 forever.
 
 ## Item swaps
 
-A market's liquidity is not limited to SOL: **the collectible's own supply is liquidity**. When a market is backed by "Pikachu [PSA](https://www.psacard.com) 10", every vaulted copy of that card+grade can enter the market. A holder deposits their on-chain copy (a vaulted-card NFT, or a collection NFT for floor markets) and receives tokens; any token holder can do the reverse and walk away with a copy.
+A market's liquidity is not limited to SOL: the collectible has an **on-chain door in and out** of the market. When a market is backed by "Pikachu [PSA](https://www.psacard.com) 10", a holder of a vaulted copy of that card+grade can swap the real item for tokens, and any token holder can swap back for a copy while the item reserve holds one.
 
-Both directions are **value-based**, never a fixed per-item token count:
+Both directions are **value-based**, priced at the oracle value, never a fixed per-item token count:
 
 ```text
-tokens per item = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6
+gross tokens per item = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6
+net    tokens per item = gross * (1 - 0.7%)
 ```
 
-The index is launch-scaled (it prices a *unit*, not a card), so `units_per_item_micro` restores the item's real size: how many units one physical item was worth at launch, in millionths (`card_index_at_launch / 0.625 SOL`). The numerator is then what one copy is worth at current prices and the denominator is what one token trades for (the mark EMA). You always exchange one item for tokens of equal market value at that moment:
+The index is launch-scaled (it prices a *unit*, not a card), so `units_per_item_micro` restores the item's real size: how many units one physical item was worth at launch, in millionths. The numerator is what one copy is worth at the current oracle value and the denominator is what one token trades for (the mark EMA), so you exchange one item for tokens of equal value at that moment, minus the **0.7%** swap fee:
 
-- Token trading at its index parity: one copy swaps for about `units_per_item` units of tokens.
-- Token trading at half the index (mark EMA at 50% of parity): one copy swaps for about twice that, because each token is worth half as much. The value received is identical.
-
-In the end-to-end run, a Frogana copy worth 0.44 SOL at launch was deposited and paid out about 651,000 tokens, worth 0.436 SOL at the mark: equal value at execution, with the small gap coming from EMA smoothing of the index and the mark.
+- Token trading at parity to its index: one copy swaps for about `units_per_item` units of tokens, less the fee.
+- Token trading at half the index: one copy swaps for about twice that, because each token is worth half as much. The value received is the same, less the fee.
 
 Mechanics:
 
 - Only **registered** copies are accepted. [`register_item`](/reference/instructions#register_item) creates an `ItemRegistration` PDA per (market, item mint); registration is admin-gated in v1 while the relayer verifies vault provenance off chain.
 - Deposited copies sit in a market-authority escrow (one ATA per item mint); `Market.items_deposited` counts them and `ItemSwapped` fires on every swap. See [Events](/reference/events#itemswapped).
-- Deposit tokens come from the **item reserve** (`["items", market]`), a third preminted allocation sized by `params.item_reserve` at creation, so supply stays fixed. `ItemReserveDepleted` bounds the facility exactly like the treasury bounds shorts; withdrawals refill the reserve. A market created with `item_reserve = 0` has no item facility, and creating one with `item_reserve > 0` requires `units_per_item_micro > 0` (`ZeroAmount` otherwise). The launch executor sizes the reserve for 25 deposited items at launch scale.
-- Both directions work in **either phase**, curve or AMM: during Bootstrap the mark EMA is seeded at the curve's opening price and stepped by every curve trade, so a copy can be deposited from the first block. The market must be unfrozen with a fresh index and a nonzero mark.
+- Deposit tokens come from the **item reserve** (`["items", market]`), funded by an SPL transfer at listing. `ItemReserveDepleted` bounds the facility; withdrawals refill the reserve. A market with a zero item reserve has no item facility.
+- The swap fee is the same **0.7%** the pool charges, split 50/50 creator/protocol.
 
-**Why the mark EMA and not spot.** Pricing the swap off the AMM spot would make it sandwichable: buy the pool up, deposit a copy into the inflated price, dump. The mark EMA moves by at most `min(dt, window)/window` per block, so a single-transaction price spike barely moves the swap rate. The same smoothing that protects [funding](/concepts/funding) protects item swaps.
+**Why the mark EMA and not spot.** Pricing the swap off the live pool spot would make it sandwichable: buy the pool up, swap a copy into the inflated price, dump. The mark EMA moves by at most `min(dt, window)/window` per block, so a single-transaction price spike barely moves the swap rate. The same smoothing that protects [funding](/concepts/funding) protects item swaps.
 
-**What this does to the market.** The swap is deliberately value-neutral in SOL terms: at execution you always give and receive equal value, so depositing or withdrawing is not itself an arbitrage against the pool. What it adds is a physical entry and exit. A holder converts a copy into liquid tokens at fair value without a marketplace sale, and while escrow holds copies, any token holder can convert index-referenced exposure into the real thing. The token stops being a pure reference to the card's price and becomes, up to escrow inventory, convertible into it.
+**What this does to the market.** The swap is deliberately value-based: at execution you give and receive equal value (less the fee), so it is not itself an arbitrage against the pool. What it adds is a physical entry and exit. A holder converts a copy into liquid tokens at fair value without a marketplace sale, and while the item reserve and escrow hold copies, any token holder can convert index-referenced exposure into the real thing. This is **optional redemption**, not custody by default: the token is price exposure; the item swap is the door for anyone who actually wants the physical item.
 
-## Why the reserve valve matters
+## The tether, briefly
 
-The treasury paths are the price tether's muscles. When the synth trades above the index, drawing new circulating supply from the reserve at index value via `open_short` and selling it is profitable, which adds circulating supply and pushes the price down. When it trades below, shorts buy back cheap and `repay_burn`, which pulls supply out of circulation and pushes the price up. [Funding](/concepts/funding) pays whichever side the tether needs more of.
-
-<Note>
-The reserve, sized at creation (internal venue) or funded at listing time (external venue), bounds how much tether pressure the market can exert. When it is empty the facility is full: that is the open-interest ceiling enforced by arithmetic. See [Parameters](/concepts/parameters).
-</Note>
+The token has no fixed-rate redemption pot, and [item swaps](#item-swaps) are optional value exchanges rather than a peg mechanism. What holds the pool price near the index is the [funding](/concepts/funding) rate and the [cash-settled shorts](/concepts/shorts) that respond to it: when the token trades rich, funding pays shorts and hedgers open shorts against the mark; when it trades cheap, funding charges shorts and they close. See [How it works](/how-it-works#the-tether).

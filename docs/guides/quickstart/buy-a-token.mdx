@@ -1,6 +1,6 @@
 ---
 title: "Buy a token"
-description: "Pay with SOL, or deposit a real copy of the collectible."
+description: "Pay with SOL through Jupiter, or swap in a real copy of the collectible."
 ---
 
 There are two ways in: SOL, like any token, or the collectible itself.
@@ -9,41 +9,43 @@ There are two ways in: SOL, like any token, or the collectible itself.
 
 <Steps>
   <Step title="Open the market and pick an amount">
-    The trade panel quotes exactly what you will receive, the 0.70% fee,
+    The trade panel quotes exactly what you will receive, the 0.7% fee,
     and the price impact before you sign.
   </Step>
   <Step title="Confirm">
-    On the curve your buy moves the price along the launch curve; after
-    migration it trades against the AMM pool. Either way the fill lands in
-    one transaction.
+    Your buy routes through **Jupiter** into the token's [Meteora](https://www.meteora.ag)
+    pool (a Dynamic Bonding Curve at launch, a DAMM v2 pool after migration).
+    Either way the fill lands in one transaction.
   </Step>
 </Steps>
 
 ## Pay with the collectible
 
-If you hold a registered on-chain copy of the underlying (a vaulted card NFT or a collection NFT), you can deposit it instead of paying SOL.
+If you hold a registered on-chain copy of the underlying (a vaulted card NFT or a collection NFT), you can swap it in instead of paying SOL.
 
 <Steps>
   <Step title="Switch to 'Pay with the collectible'">
     The panel detects registered copies in your wallet and shows the item's
     live value.
   </Step>
-  <Step title="Deposit">
-    You receive tokens **equal in value to the copy at the current price**:
-    not a fixed amount. If the token trades cheap, one copy buys more
-    tokens; if it trades rich, fewer. The copy goes into the market's
-    escrow, where anyone exiting can later claim it.
+  <Step title="Swap it in">
+    You receive tokens **equal in value to the copy at the oracle value**,
+    minus the 0.7% swap fee: not a fixed amount. If the token trades cheap,
+    one copy buys more tokens; if it trades rich, fewer. The copy goes into the
+    market's escrow, where anyone exiting can later swap it out.
   </Step>
 </Steps>
 
 <Note>
-  Item deposits work in both phases: on the curve from the very first
-  block, and on the AMM after migration. Pricing uses a smoothed mark, so
-  the rate cannot be manipulated inside a single transaction.
+  Item swaps price off a smoothed mark, so the rate cannot be manipulated
+  inside a single transaction. They draw from a funded item reserve; if the
+  reserve is empty, swapping a copy in is unavailable until withdrawals refill
+  it.
 </Note>
 
 <Tip>
-  **Paying with the collectible is feeless.** SOL trades pay the 0.70%
-  fee; depositing a real copy pays nothing, by design: bringing the real
-  thing into the pool is the behavior the protocol most wants to reward.
+  **The item swap is optional redemption, not custody by default.** Buying the
+  token gives you the collectible's price exposure; swapping the real copy in
+  and out is the door for anyone who actually wants to move the physical item.
+  It pays the same 0.7% fee a SOL trade does.
 </Tip>

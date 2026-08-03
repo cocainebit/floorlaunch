@@ -1,6 +1,6 @@
 ---
 title: "How it works"
-description: "The life of a commas market: listing, oracle index, bonding curve launch, graduation, and the live phase with AMM trading, CDP shorts, funding, and liquidations."
+description: "The life of a commas market: listing, oracle index, Meteora DBC launch, migration to DAMM v2, and the live phase with Jupiter-routed trading, cash-settled shorts, funding, and liquidations."
 ---
 
 Every ***commas*** market moves through the same lifecycle. This page walks it end to end; each stage links to a concept page with the exact math and parameters.
@@ -10,76 +10,64 @@ Every ***commas*** market moves through the same lifecycle. This page walks it e
 Every ***commas*** token is priced against a collectible, not against SOL or a dollar peg. One million tokens represent one unit of that collectible: one [PSA](https://www.psacard.com) 10 card, or one floor NFT of a collection. A worked example:
 
 - A market is listed for PSA 10 Umbreon VMAX Alt Art. The card trades around \$2,100 in the real world, so one full unit of tokens is worth about \$2,100 of exposure, and each individual token about \$0.0021.
-- The card's real price doubles over the next year. The token's index doubles with it, and funding plus hedger arbitrage drag the token's market price along. Your exposure doubled without you ever buying, grading, storing, or insuring a card.
+- The card's real price doubles over the next year. The token's index doubles with it, and funding drags the token's pool price along. Your exposure doubled without you ever buying, grading, storing, or insuring a card.
 - The card slumps 30 percent instead. Your token exposure slumps with it. This is price exposure in both directions, not a bet that only pays up.
 
 SOL is the currency you trade with and the collateral hedgers post. It is never the thing the token tracks. Keep that frame through the lifecycle below: every stage exists to keep the token honest about one collectible's price.
 
 ## 1. Listing
 
-A market is created for one collectible underlying: a specific card+grade (for example, PSA 10 of a given card), a basket of cards, or an NFT collection's floor. Every launch gets its **own market and its own token**: the market's identifier is unique per launch, so the same collectible can be launched against any number of times, each launch with its own curve, supply, and creator. The program-level `create_market` is admin-gated in v1 and submitted by the launchpad service on the creator's behalf, with listing criteria (sale frequency, depth, population) enforced at listing time. Creation initializes the market account, the synth mint (full supply preminted across the curve allocation, hedge reserve, and item reserve, mint authority revoked in the same transaction), a program-controlled SOL vault, and an AMM pool token account. See [Listing a market](/guides/listing-a-market).
+A market is created for one collectible underlying: a specific card+grade (for example, PSA 10 of a given card), a basket of cards, or an NFT collection's floor. Every launch gets its **own market and its own token**: the token is a fresh SPL mint, so the same collectible can be launched against any number of times, each launch with its own pool and creator. Program-level market creation is admin-gated in v1 and submitted by the launchpad service on the creator's behalf, with listing criteria (sale frequency, depth, population) enforced at listing time. See [Listing a market](/guides/listing-a-market).
 
 ## 2. The index goes live
 
-The market's price feed goes live: a signed relayer service that reads the collectible's real prices from marketplaces ([eBay](https://www.ebay.com) and [TCGplayer](https://www.tcgplayer.com) aggregates, [Collector Crypt](https://collectorcrypt.com), [Magic Eden](https://magiceden.io)), filters manipulation, and writes the result on chain as index observations, the price of one unit of the collectible in lamports. On chain, pushes are rate-limited, smoothed into a time-weighted EMA (the index TWAP), and checked against a [circuit breaker](/concepts/circuit-breaker) that freezes the market if an observation deviates too far from the TWAP. How the price is estimated off chain is covered in [Oracle & Relayer](/oracle/architecture).
+The market's price feed goes live: a signed relayer service reads the collectible's real price (live [Magic Eden](https://magiceden.io) floor for NFT collections; operator-attested [Collector Crypt](https://collectorcrypt.com) floors for graded cards, converted to SOL through [Pyth](https://pyth.network)) and writes it on chain as index observations, the price of one unit of the collectible in lamports. On chain, pushes are rate-limited, smoothed into a time-weighted EMA (the index TWAP), and checked against a [circuit breaker](/concepts/circuit-breaker) that freezes the market's risk machinery if an observation deviates too far from the TWAP. How the price is estimated off chain is covered in [Oracle & Relayer](/oracle/architecture).
 
 <Note>
-Both halves are implemented in v1: the on-chain push, TWAP, breaker, and [staleness guard](/concepts/price-index#staleness-guard), and the off-chain price feed (the [relayer](/oracle/architecture)) that estimates and pushes prices (production card-price API sources are still pending).
+The on-chain half (push, TWAP, breaker, [staleness guard](/concepts/price-index#staleness-guard)) and the off-chain price feed (the [relayer](/oracle/architecture)) are both live. NFT floors read live from Magic Eden; a fully automated graded-card feed is still pending, so graded prices are operator-attested from Collector Crypt for now.
 </Note>
 
-## 3. Launch phase: the bonding curve
+## 3. Launch: the Meteora DBC pool
 
-<Frame caption="Two doors in, two doors out: the SOL legs pay the fee, the real item legs pay nothing.">
-  <img className="hidden dark:block" src="/images/economics/03-two-doors.png" alt="Two doors in, two doors out: buy or sell with SOL around the curve and AMM lifecycle, or swap a real copy in and out feelessly." noZoom />
-  <img className="block dark:hidden" src="/images/economics/03-two-doors-light.png" alt="Two doors in, two doors out: buy or sell with SOL around the curve and AMM lifecycle, or swap a real copy in and out feelessly." noZoom />
+<Frame caption="Two doors in, two doors out: buy or sell for SOL on the Meteora pool, or swap the real copy in and out.">
+  <img className="hidden dark:block" src="/images/economics/03-two-doors.png" alt="Two doors in, two doors out: buy or sell with SOL on the Meteora pool, or swap a real copy in and out." noZoom />
+  <img className="block dark:hidden" src="/images/economics/03-two-doors-light.png" alt="Two doors in, two doors out: buy or sell with SOL on the Meteora pool, or swap a real copy in and out." noZoom />
 </Frame>
 
-The synth launches on a constant-product bonding curve with virtual reserves, the same shape popularized by memecoin launchpads, and every launch is priced identically: 1B token supply, a **25 SOL market cap at open**, and migration once the curve has raised **100 SOL**, so the AMM pool starts with 100 SOL of real liquidity inside it (about a 625 SOL market cap at the close). The collectible's price never touches the curve; the oracle index is launch-scaled so premium and funding stay meaningful. Buys draw tokens from the preminted curve allocation, sells return them for SOL, and a curve fee accrues to the protocol. At this stage the token is a launch asset backed by the SOL in the curve, not yet a tethered synthetic. See [Launch curve](/concepts/launch-curve).
+The token launches as a **[Meteora](https://www.meteora.ag) Dynamic Bonding Curve (DBC)** pool with a fresh SPL mint: **fixed 1,000,000,000 supply, mint authority revoked**, the whole supply the tradeable float. The mint's on-chain [Metaplex metadata](/concepts/synth-token#identity) brands it as the collectible so Solscan and terminals render the token *as* the underlying. Buys and sells route through **Jupiter** into the Meteora pool, which charges a **0.7%** base fee. commas attaches an on-chain oracle market to the pool ([`create_external_market`](/reference/instructions#create_external_market)) and the relayer pushes the **index** (the collectible's price) and the **mark** (the live pool price). See [Launch venue](/concepts/launch-curve).
 
 <Note>
-External-venue markets skip stages 3 and 4 entirely: a token that launched on [Meteora](https://www.meteora.ag) DBC attaches via `create_external_market`, starts directly in the live phase, and runs its CDP off a treasury reserve with an oracle-pushed mark. See [Venues](/concepts/amm#venues).
+There is no internal commas bonding curve any more. The retired v1 venue ran a self-contained curve and AMM inside the program; the current path lists directly on Meteora, so liquidity lives in audited, Jupiter-routed infrastructure. See [Venues](/concepts/amm#venues).
 </Note>
 
-## 4. Graduation
+## 4. Migration to DAMM v2
 
-When the curve has raised its SOL target, the market **auto-migrates**: `graduate` is permissionless and the indexer keeper cranks it within seconds of the target being crossed, so no one has to press a button:
-
-<Steps>
-  <Step title="Insurance fund seeded">
-    A configured share of the raised SOL can seed the market's [insurance fund](/concepts/insurance-fund); the launch convention sets it to zero so the full 100 SOL raise lands in the pool.
-  </Step>
-  <Step title="AMM seeded">
-    The rest becomes the real SOL reserve of an internal constant-product [AMM](/concepts/amm), paired against unsold curve-allocation synth at the curve's closing price; the remaining unsold excess burns, so supply only shrinks after launch.
-  </Step>
-  <Step title="Market goes live">
-    Status flips to Live. The mark price EMA initializes from the AMM spot, and the funding clock starts.
-  </Step>
-</Steps>
+As the DBC fills, Meteora **migrates the pool to DAMM v2** on its own schedule. This is Meteora's migration, not a commas graduation gate: commas never holds the curve or the pool, and no commas instruction has to be cranked for the token to keep trading. The oracle market, funding clock, and hedging facility run across both the DBC and DAMM v2 phases without interruption. See [Migration](/concepts/graduation).
 
 ## 5. Live phase
 
-Five things run continuously once a market is live.
+Four things run continuously once a market is live.
 
-**AMM trading.** Longs buy and sell the synth against the internal pool. Every swap updates the mark price EMA, which is the smoothed price the funding mechanism compares against the index. Single-transaction price spikes do not move funding or liquidation checks because all tether math reads the EMA, never spot.
+**Trading.** Longs buy and sell the token on the Meteora pool through Jupiter. The relayer keeps pushing the **mark** (the live pool price) into the same EMA smoothing the funding mechanism reads, so a single-transaction price spike does not move funding or liquidation checks.
 
-**CDP shorts.** Anyone can post SOL collateral and draw synth from the treasury reserve at the index value, at a minimum 150% collateral ratio (default). Drawing and selling is the short side of the market. Shorts close by buying synth back and returning it to the reserve. See [Shorts](/concepts/shorts).
+**Cash-settled shorts.** Anyone can post SOL collateral and open a short whose PnL settles in SOL against the oracle index (profit when the collectible falls), at a minimum 150% collateral ratio (default). No tokens are drawn and no reserve is touched: the [insurance fund](/concepts/insurance-fund) is the bounded counterparty, and total short open interest is capped by `max_open_interest`. A short closes with `close_position`, which settles PnL directly. See [Shorts](/concepts/shorts).
 
-**Funding.** A permissionless crank compares the mark EMA to the index TWAP and accrues a clamped funding rate to all short debt through a global funding index. See [Funding](/concepts/funding).
+**Funding.** A permissionless crank compares the mark EMA to the index TWAP and accrues a clamped funding rate to open shorts through a global funding index. See [Funding](/concepts/funding).
 
-**Liquidations.** If a short's collateral ratio falls below maintenance (120% default), any liquidator can repay the position's debt from their own wallet (the tokens return to the reserve) and claim the collateral plus a bonus, with the insurance fund covering shortfalls. See [Liquidations](/concepts/liquidations).
+**Liquidations.** If a short's collateral ratio falls below maintenance (120% default), any liquidator can close it; the loss is settled against collateral (topped up by the insurance fund if needed), the liquidator earns a bonus, and any remainder returns to the owner. It is cash-only, no tokens move. See [Liquidations](/concepts/liquidations).
 
-**Item swaps.** Holders of registered on-chain copies of the underlying (vaulted-card NFTs, collection NFTs) can deposit a copy into the market's escrow and receive tokens of equal value, priced at the index over the mark EMA; any token holder can do the reverse and take a copy out while escrow holds one. The collectible's own supply becomes market liquidity. See [Item swaps](/concepts/synth-token#item-swaps).
+**Item swaps.** Holders of the registered collectible (a vaulted-card NFT, a collection NFT) can swap the real item for tokens at the oracle value, and any token holder can swap back for a copy while the item reserve holds one. The swap charges the **0.7%** fee and is sourced from a funded item reserve. It is optional redemption, not custody by default. See [Item swaps](/concepts/synth-token#item-swaps).
 
-## The two-sided tether
+## The tether
 
-The synth has no fixed-rate redemption pot: [item swaps](/concepts/synth-token#item-swaps) are value-neutral exchanges, not a peg mechanism, and they depend on escrow inventory. So what keeps the price near the index?
+The token has no fixed-rate redemption pot: [item swaps](/concepts/synth-token#item-swaps) are optional value exchanges, not a peg mechanism, and they depend on item-reserve inventory. So what keeps the pool price near the index?
 
-**Above the index:** drawing is profitable. A shorter can post collateral, draw synth from the reserve at index value, and sell it at the higher mark. That new circulating supply pushes the mark down. The premium also makes funding positive for shorts, paying anyone willing to hold the tether side. Together these cap sustained upside deviation.
+**Above the index:** shorting is profitable and funding turns positive for shorts. A hedger posts collateral and opens a cash-settled short at the rich mark, expecting the token to fall back toward the index; funding also pays whoever holds the short side while the mark sits above the index. Together these cap sustained upside deviation.
 
-**Below the index:** buying back is profitable. Existing shorts can repurchase synth below the value they drew it at and repay for a profit, which is direct buy pressure. Funding simultaneously charges shorts while the mark sits under the index, pushing them toward exactly that buy-and-repay, and paying would-be new shorts to wait. Together these support sustained downside deviation.
+**Below the index:** existing shorts close for a profit (they entered rich, the mark is now cheap) and funding charges shorts while the mark sits under the index, pushing them to close and pushing new shorts to wait. Closing a short does not itself buy the token, but the long side is being paid the funding that shorts pay, which is the incentive to bid the mark back up.
 
-The result is a soft peg: price oscillates around the index within a basis band set by fees, collateral cost, and the funding clamp, rather than being nailed to it by redemption. That softness is the price of having no vault.
+The result is a soft peg: the pool price oscillates around the index within a band set by fees, collateral cost, and the funding clamp, rather than being nailed to it by redemption. That softness is the price of having no vault.
 
 ## Why holders are the natural shorts
 
-A synthetic market needs someone willing to be short the underlying. For collectibles, that someone already exists: the holder. A collector sitting on an appreciated card or NFT can hedge by drawing and selling synth, locking in the current price in SOL terms without selling the physical item, losing community status, or triggering a sale. Their downside on the short is offset by the asset they hold. This gives every market an organic, structurally motivated short side rather than relying on speculators alone.
+A synthetic market needs someone willing to be short the underlying. For collectibles, that someone already exists: the holder. A collector sitting on an appreciated card or NFT can hedge by opening a cash-settled short, locking in the current price in SOL terms without selling the physical item, losing community status, or triggering a sale. Their downside on the short is offset by the asset they hold. This gives every market an organic, structurally motivated short side rather than relying on speculators alone.

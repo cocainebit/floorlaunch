@@ -9,15 +9,21 @@ Smart contract risk is real everywhere, and pretending otherwise is how users ge
 
 | Risk | What happens elsewhere | ***commas*** |
 | --- | --- | --- |
-| Hidden mint | Team mints supply after launch and dumps | **Impossible by construction**: the mint authority is revoked in the creation transaction; supply can only shrink (unsold curve tokens burn at migration) |
-| Curve rug | Creator edits curve parameters mid-flight | Curve parameters are **immutable** after creation; the program rejects any change |
-| Fake liquidity | Pool seeded thin, drained by insiders | Migration requires the full 100 SOL raise, and **all of it** seeds the AMM pool |
-| Oracle manipulation | A bad price feed liquidates or mispricess everyone | Oracle pushes are EMA-smoothed and rate-limited; any push deviating hard from the trend **freezes the market** instead of moving it (circuit breaker), and stale feeds block the risky operations entirely |
+| Hidden mint | Team mints supply after launch and dumps | **Impossible by construction**: the SPL mint is created with a fixed 1,000,000,000 supply and its mint authority is revoked at creation; nothing can ever mint again |
+| Curve rug | Creator edits curve parameters mid-flight | The curve is [Meteora](https://www.meteora.ag)'s Dynamic Bonding Curve, not commas code; neither the creator nor commas can edit the pool's schedule mid-flight |
+| Fake liquidity | Pool seeded thin, drained by insiders | Liquidity lives in Meteora's audited DBC that migrates to a DAMM v2 pool; commas never holds the pool and cannot pull it |
+| Oracle manipulation | A bad price feed liquidates or misprices everyone | Oracle pushes are EMA-smoothed and rate-limited; any push deviating hard from the trend **freezes the commas machinery** instead of moving it (circuit breaker), and stale feeds block the risky operations entirely |
 | Sandwich pricing | Swap rates read spot price, attacker moves it in the same block | Item swaps and funding price off a **time-weighted mark**, which a single-transaction spike barely moves |
-| Insolvent liquidations | Bad debt socialized to everyone | Overcollateralized positions (150% to open, 120% maintenance), liquidator bonus, and a per-market insurance fund |
+| Insolvent shorts | Bad debt socialized to everyone | Cash-settled shorts are overcollateralized (150% to open, 120% maintenance), settle in SOL against a per-market insurance fund, and total short open interest is capped by `max_open_interest` |
 
-## The Meteora DBC leg
+## The Meteora leg
 
-Launches on the external venue run on **[Meteora](https://www.meteora.ag)'s Dynamic Bonding Curve into DAMM v2**: contracts that are audited, immutable to us, and already carry billions in volume across the Solana ecosystem. On that venue ***commas*** never holds custody of the curve or the pool at all; we attach the synthetic layer (oracle, hedging, item pools) alongside, and creator fee splits are enforced by Meteora's own program, not ours.
+Every launch runs on **Meteora's Dynamic Bonding Curve into DAMM v2**: contracts that are audited, immutable to us, and already carry billions in volume across the Solana ecosystem. commas never holds custody of the curve or the pool; we attach the synthetic layer (oracle index, cash-settled shorts, item swaps) alongside, and the 0.7% fee split is enforced by Meteora's own program, not ours.
 
-This is a deliberate architecture choice: the highest-risk piece of any launchpad: the money-holding curve: can run on the most battle-tested contracts on Solana rather than on fresh code.
+This is a deliberate architecture choice: the highest-risk piece of any launchpad, the money-holding curve, runs on the most battle-tested contracts on Solana rather than on fresh code.
+
+## What risk remains
+
+- **The oracle key.** The index and mark are pushed by a signed relayer. A stolen key can move the index by at most `breaker_bps` per push before the market freezes, and the [funding clamp](/concepts/funding) bounds the damage of even accepted pushes, but the key is a trusted component. See [Circuit Breaker](/concepts/circuit-breaker).
+- **Graded-card attestation.** Graded-card indexes are operator-attested from [Collector Crypt](https://collectorcrypt.com) floors today, not a fully automated feed. NFT floors read live from Magic Eden. Treat card indexes as operator-maintained until the automated pipeline ships (see [Roadmap](/roadmap)).
+- **The insurance fund is bounded.** It is the short side's counterparty. If it is exhausted, closing shorts may not be paid full profit and liquidators may get a partial bonus until it is replenished with `fund_insurance`. See [Insurance Fund](/concepts/insurance-fund).

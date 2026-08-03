@@ -1,45 +1,38 @@
 ---
 title: "Economics"
-description: "How a token's price creates value for the collectible behind it."
+description: "How the funding tether, fees, and item swaps hold a token to the collectible behind it."
 ---
 
-A ***commas*** token is not a picture of a collectible. It is a machine that moves real supply and real demand between the token market and the collectible market. This page walks the loop.
+A ***commas*** token is not a picture of a collectible. It is a token whose price is pulled toward a real collectible's price by a funding tether, with an optional door for the physical item to come in and out. This page walks the loop and the flows.
 
-## The two-way door
+## The tether is funding, not redemption
 
-Every market has an escrow that accepts real copies of the underlying and pays out tokens of equal value, and accepts tokens and pays out real copies. That door is what makes the rest work:
+The peg is economic, the same shape that holds a perpetual future to its index. When the token's pool price (the [mark](/concepts/amm)) sits above the collectible's [index](/concepts/price-index), [funding](/concepts/funding) pays the short side, and holders of the underlying open [cash-settled shorts](/concepts/shorts) against the rich mark to lock in their price. When the token sits below the index, funding charges shorts and the long side collects that flow, which is the incentive to bid the mark back up. Neither leg needs permission, a market maker, or the team.
 
-- **Token trades above the collectible's value** → depositing a copy pays more than the copy is worth elsewhere. Holders of the real thing feed copies in, take profit in tokens, and their selling presses the token back down toward fair value. The copies stay locked in escrow.
-- **Token trades below the collectible's value** → redeeming is cheap: you take a real copy out for less than it costs on a marketplace. Buying tokens to redeem presses the token back up.
-
-Neither direction needs permission, a market maker, or the team. The arbitrage is the peg.
-
-<Frame caption="The no-arbitrage corridor: outside it, feeless item swaps pull the price back.">
-  <img className="hidden dark:block" src="/images/economics/05-arb-corridor.png" alt="The no-arbitrage corridor: outside it, feeless item swaps pull the price back." noZoom />
-  <img className="block dark:hidden" src="/images/economics/05-arb-corridor-light.png" alt="The no-arbitrage corridor: outside it, feeless item swaps pull the price back." noZoom />
+<Frame caption="The no-arbitrage corridor: outside it, funding and cash-settled shorts pull the price back.">
+  <img className="hidden dark:block" src="/images/economics/05-arb-corridor.png" alt="The no-arbitrage corridor: outside it, funding and cash-settled shorts pull the price back toward the index." noZoom />
+  <img className="block dark:hidden" src="/images/economics/05-arb-corridor-light.png" alt="The no-arbitrage corridor: outside it, funding and cash-settled shorts pull the price back toward the index." noZoom />
 </Frame>
 
-## Why token demand reaches the individual collectible
+The peg is **soft**: funding drifts the price toward the index within a band set by fees, collateral cost, and the funding clamp. It does not pin the price block by block. That softness is the honest price of having no vault and no redemption pot to drain.
 
-Follow what a wave of token buying actually does:
+## The optional item door
 
-1. The token's price rises above the collectible's index.
-2. Depositing copies becomes profitable, so copies flow into escrow.
-3. Every deposited copy leaves the collectible's tradable float: one fewer Pikachu [PSA](https://www.psacard.com) 10 listed, one fewer floor NFT for sale.
-4. A thinner float means the marketplace floor holds firmer or climbs, which the oracle index picks up, which raises the token's fair value: and the loop continues at the higher level.
+Every market can also hold an **item reserve** and escrow: a holder of the registered collectible can swap the real item for tokens at the oracle value, and any token holder can swap back for a copy while the reserve holds one. This is **optional redemption** at a **0.7%** fee, not the peg and not custody by default:
 
-Token demand becomes a **supply sink** for the collectible itself. This is the part attention-backed tokens structurally cannot do: a memecoin's buying pressure never removes anything from any real market.
+- **Token trades above the collectible's value** → swapping a copy in pays more than the copy is worth elsewhere (less the fee). Holders of the real thing feed copies in, take tokens, and their selling presses the token back toward fair value.
+- **Token trades below the collectible's value** → swapping a copy out is cheap (less the fee). Buying tokens to redeem presses the token back up.
 
-<Frame caption="The transmission loop: token buying ends up consuming the collectible's floor asks, and the higher floor comes back as index.">
-  <img className="hidden dark:block" src="/images/economics/06-transmission-loop.png" alt="The transmission loop: token buying ends up consuming the collectible's floor asks, and the higher floor comes back as index." noZoom />
-  <img className="block dark:hidden" src="/images/economics/06-transmission-loop-light.png" alt="The transmission loop: token buying ends up consuming the collectible's floor asks, and the higher floor comes back as index." noZoom />
+<Frame caption="Token demand can pull real copies into the market through the optional item swap.">
+  <img className="hidden dark:block" src="/images/economics/06-transmission-loop.png" alt="The transmission loop: token buying can consume the collectible's float through optional item swaps, and the higher floor comes back as index." noZoom />
+  <img className="block dark:hidden" src="/images/economics/06-transmission-loop-light.png" alt="The transmission loop: token buying can consume the collectible's float through optional item swaps, and the higher floor comes back as index." noZoom />
 </Frame>
 
-The same wiring dampens the way down: if the token is dumped below fair value, redeemers pull discounted copies out of escrow rather than pushing sell pressure onto the collectible's marketplace.
+Be honest about the strength of this effect: it is real but **bounded and optional**. It only fires when the token trades far enough from fair value to clear the 0.7% fee, it depends on someone actually holding the registered collectible and choosing to swap, and it is capped by the item reserve's size. It is a genuine door between the token and the physical market, not a mechanical peg, and it is not what the token's solvency depends on.
 
-<Frame caption="The asymmetry: upside transmission is bounded by marketplace float, downside is hard-capped by escrow inventory.">
-  <img className="hidden dark:block" src="/images/economics/07-asymmetry.png" alt="The asymmetry: upside transmission is bounded by marketplace float, downside is hard-capped by escrow inventory." noZoom />
-  <img className="block dark:hidden" src="/images/economics/07-asymmetry-light.png" alt="The asymmetry: upside transmission is bounded by marketplace float, downside is hard-capped by escrow inventory." noZoom />
+<Frame caption="The asymmetry: upside transmission is bounded by float, downside by item-reserve inventory.">
+  <img className="hidden dark:block" src="/images/economics/07-asymmetry.png" alt="The asymmetry: upside transmission is bounded by marketplace float, downside is capped by item-reserve inventory." noZoom />
+  <img className="block dark:hidden" src="/images/economics/07-asymmetry-light.png" alt="The asymmetry: upside transmission is bounded by marketplace float, downside is capped by item-reserve inventory." noZoom />
 </Frame>
 
 ## Who earns what
@@ -47,17 +40,17 @@ The same wiring dampens the way down: if the token is dumped below fair value, r
 | Flow | Where it goes |
 | --- | --- |
 | 0.1 SOL launch fee | Protocol treasury |
-| 0.70% fee on every trade | Half to the market's fee receiver, half to the protocol |
-| Funding payments | Between longs and hedgers, tethering price to the index |
-| Item swaps | **Feeless in both directions**: depositing or redeeming real copies pays no fee, so the arbitrage that locks copies into the pool is never taxed |
+| 0.7% fee on every trade | Half to the market's fee receiver, half to the protocol (the Meteora pool base fee) |
+| 0.7% fee on item swaps | Same 50/50 split |
+| Funding payments | Between the short side and the [insurance fund](/concepts/insurance-fund), tethering price to the index |
 
-The fee receiver can be an identity (an X account, a YouTube channel, a forum figure), which means a community can launch a market and route half its volume fees to the person who actually built that collectible's community: without asking them first.
+The fee receiver can be an identity (an X account, a YouTube channel, a forum figure), so a community can launch a market and route half its volume fees to the person who actually built that collectible's community, without asking them first. The fee accrues in a keyless escrow and is released after ownership proof via [X (OAuth)](https://x.com), YouTube, or [Elite Fourum](https://elitefourum.com) verification.
 
-<Frame caption="Where every fee goes; item swaps pay none.">
-  <img className="hidden dark:block" src="/images/economics/08-fee-flows.png" alt="Where every fee goes; item swaps pay none." noZoom />
-  <img className="block dark:hidden" src="/images/economics/08-fee-flows-light.png" alt="Where every fee goes; item swaps pay none." noZoom />
+<Frame caption="Where every fee goes: 0.7% on trades and item swaps, split 50/50.">
+  <img className="hidden dark:block" src="/images/economics/08-fee-flows.png" alt="Where every fee goes: trades and item swaps pay 0.7%, split 50/50 creator and protocol." noZoom />
+  <img className="block dark:hidden" src="/images/economics/08-fee-flows-light.png" alt="Where every fee goes: trades and item swaps pay 0.7%, split 50/50 creator and protocol." noZoom />
 </Frame>
 
 ## The hedging leg
 
-Holders of the collectible can also **short the synth against SOL collateral** to flatten their exposure without selling the real thing. Hedgers are natural sellers when the token runs hot and natural buyers when it runs cold, adding a second tether alongside the item-swap arbitrage. Funding payments between the two sides keep neither trade free. See [Hedging](/guides/hedging).
+Holders of the collectible can **open a cash-settled short** to flatten their exposure without selling the real thing: post SOL collateral, and PnL settles in SOL against the index. Hedgers are natural sellers of exposure when the token runs hot and natural closers when it runs cold, which is the structurally motivated short side alongside the funding tether. The [insurance fund](/concepts/insurance-fund) is the bounded counterparty, seeded permissionlessly with `fund_insurance`. See [Hedging](/guides/hedging).

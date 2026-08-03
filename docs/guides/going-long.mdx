@@ -1,12 +1,12 @@
 ---
 title: "Going Long"
-description: "Buy synth on the launch curve or the AMM to get liquid exposure to a collectible market."
+description: "Buy the token on its Meteora pool through Jupiter to get liquid exposure to a collectible market."
 ---
 
-Going long on ***commas*** means holding a market's synth token. The token is a
-funding-pegged synthetic: its price is pulled toward the oracle index by
-arbitrage and funding, not locked to it. You are buying exposure to the
-underlying's price in SOL terms, with a soft peg.
+Going long on ***commas*** means holding a market's token. It is a
+funding-pegged synthetic: its pool price is pulled toward the oracle index by
+funding and cash-settled shorts, not locked to it. You are buying exposure to
+the underlying's price in SOL terms, with a soft peg.
 
 <Note>
 Expect a basis of a few percent between the token price and the index. The
@@ -14,72 +14,34 @@ Expect a basis of a few percent between the token price and the index. The
 does not eliminate them block by block.
 </Note>
 
-## Where you trade depends on market phase
+## Where you trade
 
-Each market goes through two phases:
+Every market's token trades on a [Meteora](https://www.meteora.ag) pool: a
+Dynamic Bonding Curve at launch that migrates to a DAMM v2 pool. You buy and
+sell it the same way you trade any Solana token, routed by **Jupiter**, whether
+from the commas app, a Jupiter interface, or any aggregator. commas does not
+run its own curve or AMM, so there is no separate bootstrap-versus-live venue
+to think about: it is one Jupiter-routed pool the whole way.
 
-1. **Bootstrap**: the token trades on a [bonding curve](/concepts/launch-curve).
-   Buys draw tokens from the preminted curve allocation; sells return them to it.
-2. **Live**: after [graduation](/concepts/graduation), trading moves to the
-   market's internal [AMM](/concepts/amm), a constant-product pool seeded from
-   the curve raise.
+The pool charges a **0.7%** base fee, split 50/50 creator/protocol.
 
-Both phases charge a per-trade fee set in the market's
-[parameters](/concepts/parameters) (`curve_fee_bps` and `amm_fee_bps`).
-
-## Buying on the curve
+## Buying and selling
 
 <Steps>
-  <Step title="Check the market status">
-    Fetch the `Market` account. `status` must be `Bootstrap` and `frozen` must
-    be false.
+  <Step title="Find the market">
+    The token is a standard SPL mint whose metadata brands it as the
+    collectible, so it appears on Axiom, Photon, Solscan, and Jupiter. Grab the
+    mint from the market page.
   </Step>
   <Step title="Quote and set slippage">
-    Compute the expected output from the curve's virtual reserves, then pass a
-    `min_tokens_out` you are willing to accept.
+    Quote the swap through Jupiter, which routes into the Meteora pool and
+    shows the 0.7% fee and price impact. Set the slippage you will accept.
   </Step>
-  <Step title="Send curve_buy">
-    Your SOL goes to the market vault and the synth is transferred from the
-    curve allocation to your associated token account (created automatically
-    if needed).
+  <Step title="Swap">
+    Confirm the Jupiter swap. Buying SOL to the token gives you long exposure;
+    selling the token back to SOL exits it. No lockups, no gates.
   </Step>
 </Steps>
-
-```typescript
-await program.methods
-  .curveBuy(new BN(2 * LAMPORTS_PER_SOL), minTokensOut)
-  .accountsPartial({
-    market: marketPda,
-    synthMint: mintPda,
-    solVault: vaultPda,
-    user: wallet.publicKey,
-    userAta: getAssociatedTokenAddressSync(mintPda, wallet.publicKey),
-  })
-  .rpc();
-```
-
-You can exit during bootstrap with `curveSell(tokensIn, minSolOut)`, which
-returns your tokens to the curve allocation and pays out SOL, minus the curve
-fee.
-
-## Trading on the AMM
-
-After graduation, use `ammBuy` and `ammSell` with the same slippage pattern.
-The AMM adds one extra account, the market's pool token account:
-
-```typescript
-await program.methods
-  .ammBuy(new BN(1 * LAMPORTS_PER_SOL), minTokensOut)
-  .accountsPartial({
-    market: marketPda,
-    synthMint: mintPda,
-    poolToken: poolPda,
-    solVault: vaultPda,
-    user: wallet.publicKey,
-    userAta: getAssociatedTokenAddressSync(mintPda, wallet.publicKey),
-  })
-  .rpc();
-```
 
 ## Reading premium and basis
 
@@ -89,19 +51,20 @@ the underlying:
 | Field | Meaning |
 | --- | --- |
 | `index_twap` | Oracle index, lamports per whole underlying unit |
-| `mark_ema` | Smoothed AMM price, lamports per whole underlying unit |
+| `mark_ema` | Smoothed Meteora pool price, lamports per whole underlying unit |
 
 The premium is `(mark_ema - index_twap) / index_twap`. A positive premium
 means the token trades rich to the index; [funding](/concepts/funding) is then
-paying shorts to draw and sell, which pushes the price back down. A negative
-premium means the token trades cheap; shorts are being charged, which pushes
-them to buy back and repay.
+paying shorts to lean against it, and hedgers open cash-settled shorts at the
+rich mark. A negative premium means the token trades cheap; shorts are being
+charged, and the long side collects that funding.
 
 Remember the scale: 1,000,000 tokens represent one whole underlying unit (one
 floor NFT or one graded card), and the token has 6 decimals.
 
 <Warning>
-A frozen market (circuit breaker or admin action) rejects all trades until it
-is unfrozen. See [circuit breaker](/concepts/circuit-breaker). Positions and
-balances are untouched while frozen; only activity is paused.
+The commas-side machinery (shorts, funding, item swaps, oracle pushes) can be
+frozen by the [circuit breaker](/concepts/circuit-breaker), but the Meteora
+pool itself keeps trading: commas does not custody the pool. Your balances and
+positions are untouched by a freeze; only the synthetic layer pauses.
 </Warning>

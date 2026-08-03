@@ -1,66 +1,73 @@
 ---
 title: "Hedging with Shorts"
-description: "Lock in the value of a card or NFT you hold by drawing synth against SOL collateral and selling it."
+description: "Lock in the value of a card or NFT you hold by opening a cash-settled short: post SOL collateral, settle PnL in SOL against the index."
 ---
 
 If you hold the underlying (a graded card, an NFT from the collection), you
-can hedge its downside without selling it: post SOL collateral, draw synth
-from the treasury reserve at the index, and sell the synth. If the market
-falls, your short profit offsets the loss on the physical asset. You keep the
-asset, its provenance, and any holder benefits.
+can hedge its downside without selling it: post SOL collateral and open a
+**cash-settled short**. Your PnL settles in SOL against the oracle index, so
+if the market falls, your short profit offsets the loss on the physical
+asset. You keep the asset, its provenance, and any holder benefits.
 
-Shorts are also the supply side of the whole system: every circulating
-CDP-drawn token is backed by a short's collateral. See
+Shorts are the natural counter-side of the whole system: holders of the
+underlying are structurally motivated to be short it. See
 [Shorts](/concepts/shorts) for the mechanics.
+
+<Note>
+This replaced the old draw-and-sell hedge. You no longer draw synth from a
+reserve and sell it, and there is no `repay_burn` to close. You post
+collateral, hold a notional short, and `close_position` settles your PnL in
+SOL directly. No tokens are ever handled.
+</Note>
 
 ## Opening a short
 
 The market must be `Live` and not frozen. Your collateral must cover the
-drawn debt at the initial collateral ratio (`initial_cr_bps`, for example
-150%):
+short's notional at the initial collateral ratio (`initial_cr_bps`, for
+example 150%):
 
 ```
-collateral >= mint_amount_value * initial_cr / 100
-mint_amount_value = mint_amount_base_units * index_twap / 1e12
+collateral >= notional_value * initial_cr / 100
+notional_value = size_base_units * index_twap / 1e12
 ```
 
 ```typescript
-// Mint 500,000 tokens (half a unit) against 80 SOL collateral
+// Short one unit (1,000,000 tokens of notional) against 150 SOL collateral
 await program.methods
-  .openShort(new BN(80 * LAMPORTS_PER_SOL), new BN("500000000000"))
+  .openShort(new BN(150 * LAMPORTS_PER_SOL), new BN("1000000000000"))
   .accountsPartial({
     market: marketPda,
-    synthMint: mintPda,
     solVault: vaultPda,
+    insurance: insurancePda,
     position: shortPda,       // ["short", market, owner]
     owner: wallet.publicKey,
-    ownerAta: getAssociatedTokenAddressSync(mintPda, wallet.publicKey),
   })
   .rpc();
 ```
 
-Then sell the drawn synth on the AMM. The SOL you receive is your hedge
-proceeds; your position's debt remains 500,000 tokens.
+No synth is drawn and nothing is sold. Your SOL collateral sits in the market
+vault, and your position carries a one-unit short notional against the index.
 
 ## A worked example
 
 Index: 100 SOL per unit. You hold a card worth about 100 SOL and want to hedge
 all of it.
 
-- Mint 1,000,000 tokens (one unit, 1e12 base units). Debt value = 100 SOL.
+- Short one unit (1e12 base units). Notional value = 100 SOL.
 - At 150% initial CR you must post at least 150 SOL. Say you post 150 SOL.
-- You sell the synth for roughly 100 SOL (minus fees and slippage).
 - Maintenance CR is 120%, so you are liquidatable when
   `150 / index < 1.2`, that is when the index rises above 125 SOL.
 
-If the floor drops to 70 SOL: your card lost about 30 SOL of value, but you
-can buy back 1,000,000 tokens for about 70 SOL, repay, and keep the roughly
-30 SOL difference. The hedge worked.
+If the floor drops to 70 SOL: your card lost about 30 SOL of value, but your
+short's PnL is `1e12 * (100 - 70) / 1e12 = 30 SOL` of profit, paid from the
+[insurance fund](/concepts/insurance-fund) at close, and your collateral is
+returned. The hedge worked.
 
-If the floor rips to 130 SOL: your card gained 30 SOL, but your short is
-underwater and past maintenance. Either you topped up collateral on the way
-up, or a [liquidator](/concepts/liquidations) closed you out and your
-collateral paid for it. Hedges cap your upside; that is what a hedge is.
+If the floor rips to 130 SOL: your card gained 30 SOL, but your short is 30 SOL
+underwater and past maintenance. Either you topped up collateral on the way up
+and closed the 30 SOL loss out of collateral, or a
+[liquidator](/concepts/liquidations) closed you out and the loss was settled
+from your collateral. Hedges cap your upside; that is what a hedge is.
 
 ## Managing the position
 
@@ -68,7 +75,7 @@ collateral paid for it. Hedges cap your upside; that is what a hedge is.
 | --- | --- | --- |
 | Add collateral | `addCollateral(amount)` | Always allowed, even frozen |
 | Remove collateral | `withdrawCollateral(amount)` | Post-withdraw CR must stay at or above initial CR |
-| Reduce debt | `repayBurn(amount)` | Returns synth from your wallet to the reserve, up to current debt |
+| Close | `closePosition()` | Settles PnL in SOL against the insurance fund, returns remaining collateral, refunds rent |
 
 Watch your CR as the index moves. The index used everywhere is the smoothed
 `index_twap`, not raw pushes, so you have some time to react to spikes, but
@@ -76,14 +83,14 @@ not unlimited time.
 
 ## Funding while short
 
-Your debt is stored funding-scaled, so [funding](/concepts/funding) applies
-continuously without touching your account:
+Funding is folded into your settleable PnL, so [funding](/concepts/funding)
+applies continuously without you touching the position:
 
-- **Token above index** (positive premium): funding pays shorts. Your debt
-  shrinks slowly. You are being paid to hold the tether side.
-- **Token below index** (negative premium): funding charges shorts. Your debt
-  grows slowly, nudging you to buy cheap tokens back and repay, which is
-  exactly the arbitrage that lifts the price.
+- **Token above index** (positive premium): funding pays shorts. Your PnL
+  drifts up slowly. You are being paid to hold the tether side.
+- **Token below index** (negative premium): funding charges shorts. Your PnL
+  drifts down slowly, nudging you to close, which is exactly the pressure that
+  lifts the price back toward the index.
 
 Rates are clamped per day (`max_funding_bps_per_day`), so funding is a drift,
 never a shock.
@@ -91,18 +98,14 @@ never a shock.
 ## Closing out
 
 <Steps>
-  <Step title="Buy back the synth">
-    Acquire tokens equal to your current debt. Current debt =
-    `debt_scaled * funding_index / 1e12`, read from your position and the
-    market.
+  <Step title="Check your PnL">
+    Read your position and the market. Your settleable PnL is
+    `size * (index_entry - index_twap) / 1e12` plus accrued funding.
   </Step>
-  <Step title="Repay">
-    `repayBurn(currentDebt)` returns the tokens to the reserve and zeroes the
-    debt.
-  </Step>
-  <Step title="Withdraw and close">
-    `withdrawCollateral(all)` returns your SOL, then `closePosition()` reclaims
-    the account rent.
+  <Step title="Close">
+    `closePosition()` settles the PnL in SOL against the insurance fund: profit
+    is paid to you and your collateral is returned; a loss is deducted from
+    your collateral and paid into the fund, and you keep the remainder.
   </Step>
 </Steps>
 

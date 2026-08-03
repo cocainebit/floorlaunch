@@ -23,26 +23,30 @@ Every ***commas*** token is launched against a real collectible: a graded card o
     Half of the trading fees your market generates go to a receiver you
     pick. Send them to your own wallet, any address, or an identity: an X
     handle, a YouTube channel, or an [Elite Fourum](https://elitefourum.com) account. Identity fees
-    accrue in an on-chain escrow that only the verified owner can claim, so
-    you can route fees to a community figure who has never heard of you.
+    accrue in an on-chain escrow that only the verified owner can claim (via
+    X OAuth, YouTube, or Elite Fourum proof), so you can route fees to a
+    community figure who has never heard of you.
   </Step>
   <Step title="Personalise">
     Ticker, name, image, and links. Tickers are prefixed `fl` and checked
     for availability as you type. The image is uploadable; links split into
     X, website, Discord, Telegram, and the collectible's marketplace page.
+    The name and image become the token's [on-chain metadata](/concepts/synth-token#identity),
+    so it renders as the collectible on Solscan and terminals.
   </Step>
   <Step title="Review and deploy">
     The summary shows everything, including the launch fee. Deploying sends
-    0.1 SOL to the protocol treasury and creates the market. The fee
+    0.1 SOL to the protocol treasury and launches the token as a
+    [Meteora](https://www.meteora.ag) Dynamic Bonding Curve pool. The fee
     payment is verified on-chain before the market goes live.
   </Step>
 </Steps>
 
 ## What happens next
 
-Your token starts on a bonding curve with **1B supply at a 25 SOL market cap**. When the curve has raised **100 SOL**, the market migrates automatically: no button, no waiting: and the entire raise seeds the AMM pool, so trading continues with 100 SOL of real liquidity from block one.
+Your token launches as a Meteora DBC pool with a **fixed 1B supply and mint authority revoked**, all of it the tradeable float. It trades through Jupiter from block one and is visible on Axiom, Photon, and Solscan. As the curve fills, Meteora migrates it to a DAMM v2 pool: no button, no waiting.
 
-From then on you earn **half of the 0.70% fee on every trade**, paid out automatically.
+From then on you earn **half of the 0.70% fee on every trade** (and every item swap), paid out automatically.
 
 <Note>
   The oracle starts tracking the collectible's live price at launch, so your

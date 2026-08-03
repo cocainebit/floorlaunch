@@ -1,79 +1,37 @@
 ---
-title: "Graduation"
-description: "The permissionless transition from bonding curve to live market: seeding the AMM with the raise and starting the funding clock"
+title: "Migration (DBC to DAMM v2)"
+description: "How a token moves from the Meteora Dynamic Bonding Curve to a DAMM v2 pool. This is Meteora's migration, not a commas graduation gate."
 ---
 
-**Graduation** is the moment a market stops being a launchpad token and becomes a live synthetic. It converts the SOL raised on the [Launch Curve](/concepts/launch-curve) into standing AMM liquidity, and switches on the machinery that tethers the token to the [Price Index](/concepts/price-index).
+A ***commas*** token launches on a [Meteora](https://www.meteora.ag) Dynamic Bonding Curve (DBC) and, as the curve fills, Meteora **migrates the pool to DAMM v2**. This is Meteora's migration, on Meteora's schedule. It replaces the retired v1 "graduation", where the internal commas curve raised a fixed SOL target and the program seeded its own AMM.
 
-<Frame caption="The market state machine: bootstrap, live, and the frozen flag.">
-  <img className="hidden dark:block" src="/images/protocol/13-state-machine.png" alt="The market state machine: bootstrap, live, and the frozen flag." noZoom />
-  <img className="block dark:hidden" src="/images/protocol/13-state-machine-light.png" alt="The market state machine: bootstrap, live, and the frozen flag." noZoom />
+<Frame caption="The market state machine: live, with the frozen flag on the commas-side machinery.">
+  <img className="hidden dark:block" src="/images/protocol/13-state-machine.png" alt="The market state machine: live, with the frozen flag." noZoom />
+  <img className="block dark:hidden" src="/images/protocol/13-state-machine-light.png" alt="The market state machine: live, with the frozen flag." noZoom />
 </Frame>
 
-## Preconditions
+## No commas graduation gate
 
-`graduate()` is **permissionless**: anyone can crank it once the conditions hold. In practice migration is automatic: the indexer keeper sweeps every bootstrap market on a short interval, and additionally reacts to each `CurveTraded` event, so the transition lands within seconds of the raise target being crossed with no manual step for the creator or buyers. The call requires:
+There is no `graduate` instruction to crank and no SOL target the creator or buyers have to cross. commas never holds the curve or the pool, so migration needs no commas transaction: the token keeps trading through the DBC phase, through Meteora's migration, and into the DAMM v2 pool without interruption.
 
-1. Market status is `Bootstrap` (a market can only graduate once)
-2. Market is not [frozen](/concepts/circuit-breaker)
-3. `curve_sol_raised >= graduation_target_sol`
-4. An oracle index exists (`index_twap > 0`)
+The commas synthetic layer is live from the moment the market is attached with [`create_external_market`](/reference/instructions#create_external_market):
 
-The index requirement matters: the funding clock starts at graduation, and funding is meaningless without a reference price.
+- The market starts directly in `Live` status.
+- The oracle **index** and **mark** are pushed by the relayer ([`push_index`](/reference/instructions#push_index), [`push_mark`](/reference/instructions#push_mark)).
+- The funding clock, [cash-settled shorts](/concepts/shorts), and [liquidations](/concepts/liquidations) are armed.
 
-## The split
+## What the DBC to DAMM v2 move changes
 
-The raise is divided by one parameter:
-
-```text
-insurance = curve_sol_raised * insurance_share_bps / 10_000
-amm_sol   = curve_sol_raised - insurance
-```
-
-- The **insurance fund** backstops liquidation shortfalls; see [Insurance Fund](/concepts/insurance-fund).
-- The **AMM SOL reserve** becomes the real, protocol-owned liquidity the token trades against from now on.
-
-Under the launch convention `insurance_share_bps = 0`: the **entire raise seeds the pool**, so migration means the AMM starts with at least 100 SOL of real liquidity inside it (the 100 SOL target plus whatever the final buy overshot; the end-to-end run migrated at 104 SOL raised, all of it into the pool). The split machinery remains for markets listed with a nonzero share.
-
-Curve fees collected during Bootstrap are already accounted separately in `fee_lamports` and are not part of the split.
-
-## Pairing the AMM at the closing price
-
-The AMM's token side comes out of the unsold curve allocation, sized so the pool opens exactly at the curve's closing price:
-
-```text
-amm_tokens = amm_sol * curve_virtual_tokens / curve_virtual_sol
-```
-
-Since `curve_virtual_sol / curve_virtual_tokens` is the price where the curve ended, the pool's opening spot equals that price, and graduation itself causes no price gap. Under the launch convention (25 SOL virtual against the 1B supply, 100 SOL target; see [Launch curve](/concepts/launch-curve)) the closing price is 0.625 SOL per unit, and the oracle index is launch-scaled to define one unit as worth exactly that at launch, so the AMM opens at zero premium to the index. A clean 100 SOL raise pairs the pool as 100 SOL against 160M tokens; the seed stays in the market's pool token account, a program-controlled account no person can sign for.
-
-**The unsold excess burns.** The pool account still holds every curve-allocation token that was never sold; graduation keeps exactly `amm_tokens` and burns the rest (a burn needs only the market's authority over its own token account, not the revoked mint authority). Supply after graduation is exactly tokens sold on the curve + the AMM seed + the hedging reserve, and it can never grow again.
+For a holder, migration is largely transparent: the token, its metadata, and its oracle market are unchanged, and Jupiter continues to route trades. What changes is the underlying Meteora pool type (bonding curve to constant-product DAMM v2) and its liquidity profile. Because commas reads the pool only through the oracle-pushed [mark](/concepts/amm), the funding and risk machinery is indifferent to which Meteora pool type is live.
 
 <Note>
-Graduation does not migrate the curve's buyers. Tokens bought on the curve stay in their owners' wallets; only the raise moves. Holders can now trade against the AMM instead of the curve.
+Migration does not move holders' tokens or reset any commas state. The oracle index, `mark_ema`, and the funding index all carry across. Nothing about a position's collateral, PnL, or liquidation threshold changes at migration.
 </Note>
 
-## What switches on
+## The insurance fund
 
-Graduation initializes the live-market state in one transaction:
-
-| Field | Set to |
-| --- | --- |
-| `status` | `Live` |
-| `insurance_lamports` | the insurance slice (zero under the launch convention) |
-| `amm_sol_reserve`, `amm_token_reserve` | the paired reserves |
-| `mark_ema` | the AMM's opening spot price |
-| `mark_last_ts`, `funding_last_ts` | now |
-
-From this block forward:
-
-- [AMM trading](/concepts/amm) is open (`amm_buy`, `amm_sell`)
-- [CDP shorts](/concepts/shorts) can open, drawing reserve synth against SOL collateral
-- The [funding crank](/concepts/funding) can run, pulling the mark toward the index
-- [Liquidations](/concepts/liquidations) are armed
-
-The `Graduated { market, amm_sol, amm_tokens, insurance }` event records the split; see [Events](/reference/events).
+In v1 the insurance fund was seeded from a share of the internal curve's raise at graduation. There is no such raise on the Meteora path, so the [insurance fund](/concepts/insurance-fund) is instead seeded permissionlessly through [`fund_insurance`](/concepts/insurance-fund#how-it-is-funded): anyone can deposit SOL to back the short side of a market. The fund is the bounded counterparty for cash-settled shorts, so a market's usable short capacity tracks the fund's balance and the `max_open_interest` cap.
 
 ## Design intent
 
-The graduation gate is what keeps the two-phase promise honest. Before it, the token is explicitly a launch asset: pure curve price, no tether, no leverage anywhere in the system. After it, every mechanism that makes the synth track its underlying is live simultaneously, funded by the raise itself. There is no intermediate state where the token claims to track the index but lacks the liquidity to defend that claim.
+Putting the money-holding curve on Meteora means the highest-risk piece of any launchpad runs on the most battle-tested contracts on Solana rather than on fresh code, and the token is visible on every Solana terminal from launch. commas adds only the synthetic layer on top: the oracle index, the funding tether, the cash-settled short facility, and the item-swap door.
