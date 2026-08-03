@@ -250,9 +250,9 @@ export default function BlogPage() {
       {/* Main Content */}
       <main className="pl-0 md:pl-16 pt-24 pb-4 w-full max-w-[1000px] mx-auto px-4 sm:px-8 md:px-12">
         {/* Hero Image */}
-        <div className="w-full aspect-[2/1] bg-[#a881fc] rounded-2xl mb-12 relative overflow-hidden shadow-2xl shadow-purple-900/20 group">
+        <div className="w-full aspect-[2/1] bg-[#0a0a0a] rounded-2xl mb-12 relative overflow-hidden shadow-2xl shadow-black/40 group">
           <Image
-            src="/assets/blog-banner.avif"
+            src="/blog-hero.png"
             alt="The Last Supper, Panel I"
             fill
             className="object-cover"
