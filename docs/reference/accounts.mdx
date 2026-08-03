@@ -45,8 +45,8 @@ Embedded in both `Global` (defaults) and each `Market` (active values). Updatabl
 | `initial_cr_bps` | `u16` | Collateral ratio required to open a short or withdraw collateral (e.g. 15000 = 150%) |
 | `maintenance_cr_bps` | `u16` | Below this ratio a position is liquidatable |
 | `liq_bonus_bps` | `u16` | Liquidator bonus as bps of repaid debt value |
-| `max_open_interest` | `u64` | Cap on total CDP debt, in token base units |
-| `item_reserve` | `u64` | Preminted allocation backing [item swaps](/concepts/synth-token#item-swaps), in token base units; 0 disables item swaps for the market |
+| `max_open_interest` | `u64` | Cap on total short **size**, in token base units, which bounds the insurance fund's exposure; not a preminted token reserve |
+| `item_reserve` | `u64` | Allocation backing [item swaps](/concepts/synth-token#item-swaps), in token base units; 0 disables item swaps for the market. On external (Meteora) markets the item-reserve token account is created empty and funded by a plain SPL transfer post-launch; the preminted form was the retired internal path |
 | `units_per_item_micro` | `u64` | How many launch-scale units (1M tokens each) one physical item was worth at launch, in millionths; required nonzero when `item_reserve > 0` |
 | `curve_fee_bps` | `u16` | Trade fee during the launch curve |
 | `amm_fee_bps` | `u16` | Trade fee on the internal AMM |
@@ -66,7 +66,7 @@ One per underlying at `["market", collection]`.
 | `collection` | `Pubkey` | Opaque underlying identifier (seed of this PDA) |
 | `synth_mint` | `Pubkey` | The market's synth SPL mint (program PDA on the internal venue, the externally launched mint on the external venue). Mint authority is `None` in both cases: internal mints are revoked at `create_market` after the premint, so every synth is fixed-supply |
 | `status` | `MarketStatus` | `Bootstrap` (curve phase) or `Live` (post-graduation; external markets start `Live`) |
-| `venue` | `Venue` | `Internal` (program curve + AMM; fixed supply preminted at creation, mint revoked) or `External` ([Meteora](https://www.meteora.ag) DBC/DAMM launch; mark via [`push_mark`](/reference/instructions#push_mark)). CDP supply flows through the treasury reserve on both |
+| `venue` | `Venue` | `Internal` (program curve + AMM; fixed supply preminted at creation, mint revoked) or `External` ([Meteora](https://www.meteora.ag) DBC/DAMM launch; mark via [`push_mark`](/reference/instructions#push_mark)). Shorts are cash-settled on both venues (SOL collateral, PnL vs the index, the insurance fund as counterparty); there is no treasury draw. The treasury PDA is retained but no longer used for shorts |
 | `frozen` | `bool` | Circuit-breaker flag; independent of `status` so a freeze preserves the phase |
 | `params` | `MarketParams` | Active parameters (copied or overridden at creation) |
 
@@ -96,20 +96,20 @@ One per underlying at `["market", collection]`.
 | `mark_ema` | `u64` | EMA of the mark price, lamports per unit; fed by AMM swaps on the internal venue and by [`push_mark`](/reference/instructions#push_mark) on the external venue |
 | `mark_last_ts` | `i64` | Last mark update time; on external markets it also drives the mark-freshness check in `accrue_funding` |
 
-### Funding and CDP aggregates
+### Funding and short aggregates
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `funding_index` | `u128` | Cumulative funding index, `FUNDING_ONE` fixed point, starts at 1e12 |
 | `funding_last_ts` | `i64` | Last funding crank time |
-| `total_debt_scaled` | `u128` | Sum of all positions' scaled debt |
+| `total_debt_scaled` | `u128` | Sum of all positions' funding-scaled short size |
 | `total_collateral` | `u64` | Sum of all positions' collateral, lamports |
 
 ### Vault accounting and bumps
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `insurance_lamports` | `u64` | Insurance fund balance inside the [SOL vault](/reference/pdas#the-sol-vault) |
+| `insurance_lamports` | `u64` | Insurance fund balance inside the [SOL vault](/reference/pdas#the-sol-vault); the cash-settled short counterparty, seeded permissionlessly via [`fund_insurance`](/reference/instructions#fund_insurance) |
 | `fee_lamports` | `u64` | Accrued protocol fees inside the SOL vault |
 | `items_deposited` | `u32` | Copies of the underlying currently held across the market's item escrows; incremented by `deposit_item`, decremented by `withdraw_item` |
 | `bump` / `vault_bump` / `mint_bump` / `treasury_bump` | `u8` | Stored PDA bumps (`mint_bump` is meaningless on external markets) |
@@ -142,16 +142,17 @@ One per (market, owner) at `["short", market, owner]`. Created lazily by [`open_
 | `owner` | `Pubkey` | Position owner |
 | `market` | `Pubkey` | Parent market |
 | `collateral` | `u64` | Posted SOL collateral, lamports |
-| `debt_scaled` | `u128` | Funding-scaled debt (see below) |
+| `entry_notional` | `u64` | Summed lamport index-value the position is short from; cash-settled PnL = `entry_notional` minus the size's current index value |
+| `debt_scaled` | `u128` | Funding-scaled short **size** (see below) |
 | `bump` | `u8` | PDA bump |
 
-### Funding-scaled debt
+### Funding-scaled size
 
-Debt is not stored as a token amount. It is stored divided by the market's `funding_index` at the moment it was incurred, in `FUNDING_ONE` fixed point:
+The short is cash-settled: no token is minted or owed. `debt_scaled` stores the position's short **size** (base units) divided by the market's `funding_index` at the moment it was opened, in `FUNDING_ONE` fixed point:
 
 ```
-stored:  debt_scaled = ceil(minted * FUNDING_ONE / funding_index_at_open)
-current: debt        = debt_scaled * funding_index_now / FUNDING_ONE
+stored:  debt_scaled = ceil(size * FUNDING_ONE / funding_index_at_open)
+current: size        = debt_scaled * funding_index_now / FUNDING_ONE
 ```
 
-Because every position's current debt is a multiplication by the same global `funding_index`, a single [funding](/concepts/funding) crank reprices every short in the market with one account write. When the mark trades above the index the funding index falls and every short's debt shrinks; below the index it grows.
+Because every position's current size is a multiplication by the same global `funding_index`, a single [funding](/concepts/funding) crank reprices every short in the market with one account write. When the mark trades above the index the funding index falls and every short's size shrinks; below the index it grows.

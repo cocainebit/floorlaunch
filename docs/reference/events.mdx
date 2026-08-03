@@ -62,14 +62,14 @@ Fires on `amm_buy` and `amm_sell` after graduation. Same field semantics as `Cur
 
 ## ShortChanged
 
-Fires on `open_short` and `repay_burn`. Not emitted by `add_collateral` or `withdraw_collateral`.
+Fires on `open_short` and `close_position`. Not emitted by `add_collateral` or `withdraw_collateral`.
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `market` | `Pubkey` | |
 | `owner` | `Pubkey` | Position owner |
 | `collateral` | `u64` | Position collateral after the change, lamports |
-| `debt` | `u64` | Position debt after the change, base units |
+| `debt` | `u64` | Position short size after the change, base units (no token is drawn; the cash-settled short is sized, not indebted) |
 
 ## FundingAccrued
 
@@ -114,5 +114,5 @@ Fires on every successful `liquidate`. See [Liquidations](/concepts/liquidations
 | `market` | `Pubkey` | |
 | `owner` | `Pubkey` | Owner of the liquidated position |
 | `liquidator` | `Pubkey` | Keeper who executed |
-| `debt_burned` | `u64` | Base units taken from the liquidator's ATA and returned to the treasury reserve (both venues; the field name predates the fixed-supply model) |
-| `payout` | `u64` | Lamports paid to the liquidator (collateral plus any insurance top-up) |
+| `debt_burned` | `u64` | Short size (base units) closed by the liquidation; no tokens move in the cash-settled model (the field name predates it) |
+| `payout` | `u64` | Lamports paid to the liquidator as the bonus |

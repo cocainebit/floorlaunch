@@ -72,12 +72,13 @@ Guards: `curve_virtual_sol > 0`, `curve_virtual_tokens > 0`, and `units_per_item
 
 ### create_external_market
 
-Attaches a market to a token that launched on an **external venue** ([Meteora](https://www.meteora.ag) DBC into a DAMM pool). The mint already exists and its supply is fixed, so there is no curve phase: the market is created directly `Live` with `venue = External`, and CDP supply moves through the treasury reserve, exactly as on the internal venue. The treasury must be funded with reserve tokens (a plain SPL transfer to the treasury PDA) before shorts can open; its balance is the market's physical open-interest ceiling. The mark price is oracle-pushed via [`push_mark`](#push_mark).
+Attaches a market to a token that launched on an **external venue** ([Meteora](https://www.meteora.ag) DBC into a DAMM pool). This is the current launch path for new markets. The mint already exists and its supply is fixed, so there is no curve phase: the market is created directly `Live` with `venue = External`. Shorts are cash-settled against the insurance fund (see [Shorts](/concepts/shorts)), so no reserve tokens need to be drawn to open one. The item reserve token account is created empty; it is funded by a plain SPL transfer post-launch to back [item swaps](/concepts/synth-token#item-swaps). The mark price is oracle-pushed via [`push_mark`](#push_mark).
 
 | Arg | Type | Description |
 | --- | --- | --- |
 | `collection` | `Pubkey` | Opaque underlying identifier; becomes the market PDA seed |
 | `params` | `Option<MarketParams>` | Per-market override; `null` uses `Global.default_params` |
+| `fee_receiver` | `Pubkey` | Recipient recorded as `Market.fee_receiver` |
 
 | Account | Constraints |
 | --- | --- |
@@ -86,6 +87,7 @@ Attaches a market to a token that launched on an **external venue** ([Meteora](h
 | `market` | init, `["market", collection]` |
 | `synth_mint` | the externally launched mint (not a PDA; recorded as `market.synth_mint`) |
 | `treasury` | init, `["treasury", market]`, token authority = market |
+| `item_reserve` | init, `["items", market]`, `token::mint = synth_mint`, `token::authority = market`; created empty, funded by SPL transfer post-launch |
 | `sol_vault` | mut, `["vault", market]` |
 | `token_program`, `system_program` | |
 
@@ -121,7 +123,7 @@ Updates a live market's risk parameters (funding, collateral ratios, caps, fees,
 | `admin` | signer |
 | `market` | mut |
 
-Guards: admin only; `params.curve_virtual_sol` and `params.curve_virtual_tokens` must equal the market's existing values, else `ImmutableParam`. Note that lowering `max_open_interest` tightens the effective CDP cap, but raising it above the preminted treasury reserve has no effect: supply is fixed, so the physical reserve set at creation is the ceiling. Events: none.
+Guards: admin only; `params.curve_virtual_sol` and `params.curve_virtual_tokens` must equal the market's existing values, else `ImmutableParam`. `max_open_interest` caps total short size and bounds the insurance fund's exposure; it can be raised or lowered freely (shorts are cash-settled, so there is no preminted reserve ceiling). Events: none.
 
 ### withdraw_fees
 
@@ -203,6 +205,10 @@ Guards: `venue == External` (`WrongVenue`), not frozen (`Frozen`), `price_lampor
 
 ## Launch phase
 
+<Note>
+**Legacy internal venue.** `curve_buy`, `curve_sell`, and `graduate` (along with `create_market`, `amm_buy`, and `amm_sell`) belong to the retired v1 internal-curve venue. They still exist in the program but new markets launch on [Meteora](https://www.meteora.ag) DBC via [`create_external_market`](#create_external_market).
+</Note>
+
 ### curve_buy
 
 Buys synth on the bonding curve with SOL. Transfers tokens from the preminted curve allocation in the pool account to the buyer's associated token account (created on demand). See [Launch curve](/concepts/launch-curve).
@@ -254,6 +260,10 @@ Guards: Bootstrap (`NotBootstrap`), not frozen, `curve_sol_raised >= graduation_
 
 ## AMM
 
+<Note>
+**Legacy internal venue.** `amm_buy` and `amm_sell` are the retired v1 internal constant-product AMM. They still exist in the program but only apply to `Internal`-venue markets, which are no longer created; new markets launch on [Meteora](https://www.meteora.ag) DBC via [`create_external_market`](#create_external_market).
+</Note>
+
 ### amm_buy
 
 Buys synth from the internal constant-product AMM. Fee is taken from the SOL input. Updates the mark EMA.
@@ -288,29 +298,43 @@ Accounts: same as `amm_buy`.
 
 Guards: Internal venue (`WrongVenue`), Live, not frozen, `tokens_in > 0` (`ZeroAmount`), gross SOL out `< amm_sol_reserve` (`InsufficientVaultFunds`), net out `>= min_sol_out` (`Slippage`). Emits `AmmTraded { is_buy: false, sol_amount: net out }`.
 
-## CDP (shorts)
+## Shorts (cash-settled)
 
-### open_short
+### fund_insurance
 
-Posts SOL collateral and draws synth from the treasury reserve at the index, creating or growing a short position. This is the hedging side; see [Shorts](/concepts/shorts). Both venues use the same path: tokens are transferred out of the preminted reserve (nothing mints), and the treasury balance is the hard open-interest ceiling.
+Permissionless. Adds `amount` lamports to `Market.insurance_lamports` and transfers that SOL from the funder into the vault. This seeds the cash-settled short counterparty: profitable shorts are paid out of the insurance fund, so it must hold SOL for shorts to settle in the money. See [Insurance fund](/concepts/insurance-fund).
 
 | Arg | Type | Description |
 | --- | --- | --- |
-| `collateral` | `u64` | Lamports to add |
-| `mint_amount` | `u64` | Base units issued to the owner's ATA |
+| `amount` | `u64` | Lamports to add to the insurance fund |
 
 | Account | Constraints |
 | --- | --- |
 | `market` | mut, `["market", collection]` |
-| `synth_mint` | mut, `address = market.synth_mint` |
-| `treasury` | mut, `["treasury", market]` |
+| `sol_vault` | mut, `["vault", market]` |
+| `funder` | signer, mut |
+| `system_program` | |
+
+Guards: `amount > 0` (`ZeroAmount`). Events: none.
+
+### open_short
+
+Posts SOL collateral and opens (or grows) a cash-settled short of `size` base units at the current index. This is the hedging side; see [Shorts](/concepts/shorts). No tokens are drawn: the index value of `size` at open is recorded as the position's `entry_notional`, and PnL is settled in SOL against the index at close.
+
+| Arg | Type | Description |
+| --- | --- | --- |
+| `collateral` | `u64` | Lamports to post |
+| `size` | `u64` | Short size in base units, opened at the current index |
+
+| Account | Constraints |
+| --- | --- |
+| `market` | mut, `["market", collection]` |
 | `sol_vault` | mut, `["vault", market]` |
 | `position` | init_if_needed, `["short", market, owner]`, payer = owner |
 | `owner` | signer, mut |
-| `owner_ata` | init_if_needed, ATA(owner, synth_mint) |
-| `token_program`, `associated_token_program`, `system_program` | |
+| `system_program` | |
 
-Guards: Live, not frozen, both args `> 0` (`ZeroAmount`), index fresh (`NoIndex` / `IndexStale`), post-trade collateral ratio `>= initial_cr_bps` measured at the index (`InsufficientCollateral`), market-wide debt `<= max_open_interest` (`OpenInterestCapReached`), and `treasury.amount >= mint_amount` (`TreasuryDepleted`, both venues). Debt is recorded funding-scaled (rounded up). Emits `ShortChanged`.
+Guards: Live, not frozen, both args `> 0` (`ZeroAmount`), index fresh (`NoIndex` / `IndexStale`), collateral `>= initial_cr_bps` of the total notional measured at the index (`InsufficientCollateral`), total short size `<= max_open_interest` (`OpenInterestCapReached`). No tokens move. Emits `ShortChanged`.
 
 ### add_collateral
 
@@ -342,38 +366,21 @@ Accounts: same as `add_collateral`.
 
 Guards: `amount > 0` (`ZeroAmount`), not frozen (`Frozen`), `amount <= position.collateral` (`InsufficientVaultFunds`); when debt `> 0`: index fresh (`NoIndex` / `IndexStale`) and post-withdraw CR `>= initial_cr_bps` (`InsufficientCollateral`). Events: none.
 
-### repay_burn
-
-Retires debt from the owner's ATA: the tokens are returned to the treasury reserve (both venues; nothing burns). Repaying the exact current debt clears the position's debt entirely (no dust).
-
-| Arg | Type | Description |
-| --- | --- | --- |
-| `amount` | `u64` | Base units, at most the current debt |
-
-| Account | Constraints |
-| --- | --- |
-| `market` | mut, `["market", collection]` |
-| `synth_mint` | mut, `address = market.synth_mint` |
-| `treasury` | mut, `["treasury", market]` |
-| `position` | mut, `["short", market, owner]`, `has_one = owner` |
-| `owner` | signer, mut |
-| `owner_ata` | mut, ATA(owner, synth_mint) |
-| `token_program` | |
-
-Guards: not frozen (`Frozen`), `amount > 0` (`ZeroAmount`), `amount <= debt` (`RepayTooLarge`). Emits `ShortChanged`.
-
 ### close_position
 
-Closes an emptied position account and refunds its rent to the owner.
+Settles the short's PnL in SOL and closes the position account, refunding its rent to the owner. PnL is `entry_notional - (size valued at the current index)`: a profit (the index fell) is paid to the owner from the insurance fund, bounded by the fund balance; a loss (the index rose) is deducted from collateral into insurance. The owner receives their collateral plus or minus PnL.
 
 Args: none.
 
 | Account | Constraints |
 | --- | --- |
-| `position` | mut, close = owner, `["short", position.market, owner]`, `has_one = owner` |
+| `market` | mut, `["market", collection]` |
+| `sol_vault` | mut, `["vault", market]` |
+| `position` | mut, close = owner, `["short", market, owner]`, `has_one = owner` |
 | `owner` | signer, mut |
+| `system_program` | |
 
-Guards: `debt_scaled == 0` (`DebtOutstanding`), `collateral == 0` (`InsufficientCollateral`).
+Guards: not frozen (`Frozen`), index fresh (`NoIndex` / `IndexStale`). Emits `ShortChanged`.
 
 ## Item swaps
 
@@ -398,7 +405,7 @@ Guards: admin only. Events: none.
 
 ### deposit_item
 
-Deposits one registered item into the market's escrow and receives tokens worth the item from the preminted item reserve: `tokens_out = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6`. Supply stays fixed; the tokens were preminted at creation.
+Deposits one registered item into the market's escrow and receives tokens worth the item from the item reserve, **net of a 0.7% fee** (`curve_fee_bps`): `tokens_out = index_twap * BASE_UNITS_PER_NFT * units_per_item_micro / mark_ema / 1e6`, less the fee, which stays in the item reserve.
 
 Args: none.
 
@@ -419,7 +426,7 @@ Guards: not frozen, index fresh (`NoIndex` / `IndexStale`), `mark_ema > 0` (`NoM
 
 ### withdraw_item
 
-The mirror image: returns tokens worth one item (same formula, evaluated at withdrawal time) to the item reserve and takes a copy out of the market's escrow.
+The mirror image: the user pays tokens worth one item (same formula, evaluated at withdrawal time) **plus a 0.7% fee** (`curve_fee_bps`) into the item reserve and takes a copy out of the market's escrow; the extra fee accrues to the item reserve.
 
 Args: none. Accounts: same as `deposit_item`.
 
@@ -441,20 +448,17 @@ Guards: Live, not frozen, index fresh (`NoIndex` / `IndexStale`), external venue
 
 ### liquidate
 
-Permissionless liquidation of an undercollateralized short. The liquidator supplies the position's **full current debt** from their own token account (returned to the treasury reserve, both venues) and receives collateral worth the debt plus the liquidation bonus; shortfalls draw on the insurance fund; any remainder is refunded to the position owner. See [Liquidations](/concepts/liquidations).
+Permissionless, cash-only liquidation of an undercollateralized short. No tokens move. The short's realized loss (capped at its collateral) goes to the insurance fund; the liquidator takes a SOL bonus (`liq_bonus_bps` of notional, capped at the remaining equity); the owner keeps any remainder. See [Liquidations](/concepts/liquidations).
 
 Args: none.
 
 | Account | Constraints |
 | --- | --- |
 | `market` | mut, `["market", collection]` |
-| `synth_mint` | mut, `address = market.synth_mint` |
-| `treasury` | mut, `["treasury", market]` |
 | `sol_vault` | mut, `["vault", market]` |
-| `position` | mut, `["short", market, position_owner]`, `position.owner == position_owner` else `Unauthorized` |
-| `position_owner` | mut, unchecked; receives any collateral remainder |
-| `liquidator` | signer, mut; receives the payout |
-| `liquidator_ata` | mut, ATA(liquidator, synth_mint); debt is taken from here |
-| `token_program`, `system_program` | |
+| `position` | mut, `["short", market, position_owner]` |
+| `position_owner` | mut, CHECK: must equal `position.owner` else `Unauthorized`; receives any remainder |
+| `liquidator` | signer, mut; receives the bonus |
+| `system_program` | |
 
-Guards: Live, not frozen, index fresh (`NoIndex` / `IndexStale`), `debt > 0` and CR `< maintenance_cr_bps` at the index, else `NotLiquidatable`. Emits `Liquidated`.
+Guards: Live, not frozen, index fresh (`NoIndex` / `IndexStale`), liquidatable when `collateral * 10000 < (size valued at index) * maintenance_cr_bps`, else `NotLiquidatable`. Emits `Liquidated` (`payout` is the liquidator bonus).
