@@ -259,6 +259,80 @@ function parseMeteoraSwap(tx: any, baseVault: string, quoteVault: string, ts: nu
   };
 }
 
+// ---------- Helius webhook: real-time Meteora swap ingestion ----------
+// Push instead of poll: Helius POSTs /helius/webhook on any tx touching a
+// watched pool, so new/small markets index instantly. We fetch + parse the swap
+// and push it into the trade feed, deduped against the poller by signature. The
+// webhook is (re)synced to watch every meteora pool on boot + on a timer.
+// Requires HELIUS_API_KEY; the poller remains as a backfill/fallback.
+const HELIUS_WEBHOOK_SECRET = process.env.HELIUS_WEBHOOK_SECRET;
+
+async function handleHeliusTx(payload: any): Promise<void> {
+  const sig: string | undefined =
+    payload?.signature ?? payload?.transaction?.signatures?.[0];
+  if (!sig || seenSigs.has(sig)) return;
+  const meteora = Object.entries(loadListings()).filter(
+    ([, m]) => (m as any).venue === "meteora" && (m as any).dbcPool
+  );
+  if (!meteora.length) return;
+  const tx = await connection.getParsedTransaction(sig, {
+    maxSupportedTransactionVersion: 0,
+    commitment: "confirmed",
+  });
+  if (!tx) return;
+  const ts = tx.blockTime ?? Math.floor(Date.now() / 1000);
+  for (const [market, m] of meteora) {
+    const v = await poolVaults((m as any).dbcPool);
+    if (!v) continue;
+    const trade = parseMeteoraSwap(tx, v.base, v.quote, ts, sig);
+    if (trade) {
+      seenSigs.add(sig);
+      store(market).trades.push(trade);
+      broadcast({ type: "trade", market, trade });
+      break;
+    }
+  }
+}
+
+// Register (or update) the Helius webhook to watch every meteora pool address.
+async function syncHeliusWebhook(): Promise<void> {
+  const apiKey = process.env.HELIUS_API_KEY;
+  if (!apiKey) return;
+  const pools = Object.values(loadListings())
+    .filter((m: any) => m.venue === "meteora" && m.dbcPool)
+    .map((m: any) => m.dbcPool as string);
+  if (!pools.length) return;
+  const webhookURL =
+    process.env.HELIUS_WEBHOOK_URL ??
+    `${process.env.PUBLIC_BASE_URL ?? "https://commas-indexer.fly.dev"}/helius/webhook`;
+  const body: Record<string, unknown> = {
+    webhookURL,
+    transactionTypes: ["ANY"],
+    accountAddresses: pools,
+    webhookType: "raw",
+  };
+  if (HELIUS_WEBHOOK_SECRET) body.authHeader = `Bearer ${HELIUS_WEBHOOK_SECRET}`;
+  try {
+    const id = process.env.HELIUS_WEBHOOK_ID;
+    const url = id
+      ? `https://api.helius.xyz/v0/webhooks/${id}?api-key=${apiKey}`
+      : `https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`;
+    const r = await fetch(url, {
+      method: id ? "PUT" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    if (!id && j?.webhookID) {
+      console.log(`created helius webhook ${j.webhookID} - set HELIUS_WEBHOOK_ID to reuse it`);
+    } else {
+      console.log(`synced helius webhook -> ${pools.length} pool(s)`);
+    }
+  } catch (e) {
+    console.log("helius webhook sync failed:", (e as any)?.message ?? e);
+  }
+}
+
 const idl = JSON.parse(readFileSync(IDL_PATH, "utf8"));
 idl.address = PROGRAM_ID;
 const coder = new anchor.BorshCoder(idl);
@@ -551,6 +625,26 @@ app.post("/dev/launch", async (req, res) => {
   }
 });
 
+// Helius webhook receiver: real-time Meteora swaps -> trade feed. Acks fast and
+// processes async so Helius does not retry on a slow parse. Optional bearer auth.
+app.post("/helius/webhook", (req, res) => {
+  if (
+    HELIUS_WEBHOOK_SECRET &&
+    req.headers["authorization"] !== `Bearer ${HELIUS_WEBHOOK_SECRET}`
+  ) {
+    return res.status(401).end();
+  }
+  const txs = Array.isArray(req.body) ? req.body : req.body ? [req.body] : [];
+  res.status(200).json({ ok: true });
+  (async () => {
+    for (const tx of txs) {
+      try {
+        await handleHeliusTx(tx);
+      } catch {}
+    }
+  })().catch(() => {});
+});
+
 let marketsCache: { at: number; body: any } | null = null;
 app.get("/markets", async (_req, res) => {
   try {
@@ -821,9 +915,14 @@ async function refreshOracles() {
 }
 setInterval(refreshOracles, 300_000);
 setTimeout(refreshOracles, 15_000);
-// Meteora pool swap indexing for external markets (Activity + candles).
+// Meteora pool swap indexing for external markets (Activity + candles). The
+// Helius webhook is the real-time path; this poller backfills history and covers
+// anything the webhook misses. Both dedupe by signature.
 setInterval(pollMeteoraTrades, 15_000);
 setTimeout(pollMeteoraTrades, 8_000);
+// Keep the Helius webhook subscribed to every meteora pool (no-op without a key).
+setInterval(syncHeliusWebhook, 300_000);
+setTimeout(syncHeliusWebhook, 12_000);
 
 // Fee-split keeper: trading fees (0.70%) accrue per market on chain;
 // sweep any balance above 0.02 SOL as two withdraw_fees calls, half to
