@@ -469,6 +469,50 @@ describe("floorlaunch", () => {
     assert.isTrue(balAfterClose > balAfterOpen + 4 * SOL);
   });
 
+  it("pays a profitable hedge from the insurance fund", async () => {
+    // Fresh external market (Live immediately), seeded insurance. Short at
+    // INDEX0, index falls, close pays profit out of insurance.
+    const coll = Keypair.generate().publicKey;
+    const [mkt] = PublicKey.findProgramAddressSync([Buffer.from("market"), coll.toBuffer()], program.programId);
+    const [tre] = PublicKey.findProgramAddressSync([Buffer.from("treasury"), mkt.toBuffer()], program.programId);
+    const [vlt] = PublicKey.findProgramAddressSync([Buffer.from("vault"), mkt.toBuffer()], program.programId);
+    const [itm] = PublicKey.findProgramAddressSync([Buffer.from("items"), mkt.toBuffer()], program.programId);
+    const mint = await createMint(connection, payer.payer, payer.publicKey, null, 6);
+    await program.methods
+      .createExternalMarket(coll, null, payer.publicKey)
+      .accountsPartial({ global: globalPda, admin: payer.publicKey, market: mkt, synthMint: mint, treasury: tre, itemReserve: itm, solVault: vlt })
+      .rpc();
+    await program.methods.pushIndex(INDEX0)
+      .accountsPartial({ global: globalPda, oracleAuthority: oracle.publicKey, market: mkt }).signers([oracle]).rpc();
+    // Seed insurance with 10 SOL.
+    await program.methods.fundInsurance(new BN(10).mul(new BN(SOL)))
+      .accountsPartial({ market: mkt, solVault: vlt, funder: payer.publicKey }).rpc();
+    const mBefore = await program.account.market.fetch(mkt);
+    assert.equal(mBefore.insuranceLamports.toString(), (10 * SOL).toString());
+
+    const hedger = Keypair.generate();
+    const sig = await connection.requestAirdrop(hedger.publicKey, 20 * SOL);
+    await connection.confirmTransaction(sig);
+    const [pos] = PublicKey.findProgramAddressSync([Buffer.from("short"), mkt.toBuffer(), hedger.publicKey.toBuffer()], program.programId);
+    // size worth ~1 SOL at INDEX0; post 5 SOL collateral.
+    await program.methods.openShort(new BN(5).mul(new BN(SOL)), new BN("10000000000"))
+      .accountsPartial({ market: mkt, solVault: vlt, position: pos, owner: hedger.publicKey }).signers([hedger]).rpc();
+    const balAfterOpen = await connection.getBalance(hedger.publicKey);
+
+    // Index falls 40% (within the 50% breaker); window=1s so the TWAP follows.
+    await sleep(1200);
+    await program.methods.pushIndex(INDEX0.muln(60).divn(100))
+      .accountsPartial({ global: globalPda, oracleAuthority: oracle.publicKey, market: mkt }).signers([oracle]).rpc();
+
+    await program.methods.closePosition()
+      .accountsPartial({ market: mkt, solVault: vlt, position: pos, owner: hedger.publicKey }).signers([hedger]).rpc();
+    const balAfterClose = await connection.getBalance(hedger.publicKey);
+    // Got collateral (5 SOL) plus profit (~0.4 SOL) back - more than the 5 posted.
+    assert.isTrue(balAfterClose > balAfterOpen + 5 * SOL, `got ${balAfterClose - balAfterOpen}`);
+    // Insurance paid the profit out.
+    assert.isTrue((await program.account.market.fetch(mkt)).insuranceLamports.lt(mBefore.insuranceLamports));
+  });
+
   it("enforces the staleness guard and param immutability", async () => {
     // Tighten max index age to 1 second, let the index go stale, and
     // confirm index-priced operations refuse to run.

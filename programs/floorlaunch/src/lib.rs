@@ -773,6 +773,23 @@ pub mod floorlaunch {
         Ok(())
     }
 
+    /// Seed the market's insurance fund with SOL. The insurance fund is the
+    /// cash-settled short counterparty: it pays short profits and absorbs short
+    /// losses. Permissionless - anyone can add to it (protocol seeds it at/after
+    /// launch so hedgers can be paid when the collectible falls).
+    pub fn fund_insurance(ctx: Context<FundInsurance>, amount: u64) -> Result<()> {
+        require!(amount > 0, Err::ZeroAmount);
+        let m = &mut ctx.accounts.market;
+        m.insurance_lamports += amount;
+        transfer_in(
+            &ctx.accounts.funder,
+            &ctx.accounts.sol_vault,
+            &ctx.accounts.system_program,
+            amount,
+        )?;
+        Ok(())
+    }
+
     /// Release an identity fee escrow. The escrow is a program-derived
     /// system account seeded by the hash of the identity (e.g.
     /// sha256("youtube:pokerev")); fees for unverified identities
@@ -1485,6 +1502,17 @@ pub struct ReleaseEscrow<'info> {
     /// CHECK: verified wallet chosen after off-chain identity proof.
     #[account(mut)]
     pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FundInsurance<'info> {
+    #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
+    pub market: Account<'info, Market>,
+    #[account(mut, seeds = [b"vault", market.key().as_ref()], bump = market.vault_bump)]
+    pub sol_vault: SystemAccount<'info>,
+    #[account(mut)]
+    pub funder: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
