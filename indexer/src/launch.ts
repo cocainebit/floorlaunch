@@ -378,7 +378,11 @@ export async function devLaunch(
       if (fr?.escrow) feeReceiverPk = new PublicKey(fr.escrow);
       else if (fr?.value) feeReceiverPk = new PublicKey(fr.value);
     } catch {}
-    await program.methods
+    // Create the market and push the initial index in ONE atomic transaction:
+    // as separate txs, the oracle push could race ahead of the just-created
+    // market being visible to the RPC, failing with AccountNotInitialized and
+    // leaving an orphaned market. Atomic = all-or-nothing.
+    const createIx = await program.methods
       .createMarket(collection, params as any, feeReceiverPk)
       .accountsPartial({
         global: globalPda,
@@ -386,16 +390,22 @@ export async function devLaunch(
         market: marketPda,
         itemReserve: itemReservePda,
       })
-      .rpc();
-    await program.methods
+      .instruction();
+    const pushIx = await program.methods
       .pushIndex(new BN(UNIT_LAMPORTS_AT_LAUNCH))
       .accountsPartial({
         global: globalPda,
         oracleAuthority: oracle.publicKey,
         market: marketPda,
       })
-      .signers([oracle])
-      .rpc();
+      .instruction();
+    const launchTx = new anchor.web3.Transaction()
+      .add(
+        anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })
+      )
+      .add(createIx)
+      .add(pushIx);
+    await provider.sendAndConfirm(launchTx, [oracle]);
   }
 
   // Demo copies of the underlying: three item NFTs minted to the
