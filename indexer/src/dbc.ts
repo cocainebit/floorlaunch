@@ -210,14 +210,28 @@ export async function dbcLaunch(
     [Buffer.from("vault"), marketPda.toBuffer()],
     pid
   );
+  const [itemReservePda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("items"), marketPda.toBuffer()],
+    pid
+  );
+
+  // Resolve the on-chain fee receiver: an identity escrow PDA if present,
+  // else the chosen wallet, else the protocol treasury as a safe fallback.
+  let feeReceiverPk = new PublicKey(FEE_TREASURY);
+  const fr: any = (body.meta as any)?.feeReceiver;
+  try {
+    if (fr?.escrow) feeReceiverPk = new PublicKey(fr.escrow);
+    else if (fr?.value) feeReceiverPk = new PublicKey(fr.value);
+  } catch {}
 
   const unitsPerItemMicro = Math.max(
     1,
     Math.round((indexLamports / UNIT_LAMPORTS_AT_LAUNCH) * 1e6)
   );
-  // MarketParams for the external market. Hedging is cash-settled (Phase 2), so
-  // maxOpenInterest is a notional OI cap (0 = set in the Phase 2 rework), NOT a
-  // token reserve. Curve/amm fee bps are irrelevant here (trades run on Meteora).
+  // MarketParams for the external market. Hedging is cash-settled, so
+  // maxOpenInterest caps total short size (base units); profit payout is further
+  // bounded by the insurance fund (seed it before large hedges). Curve/amm fee
+  // bps drive the item-swap fee (0.7%); trades run on Meteora.
   const params = {
     indexWindowSecs: 30,
     minPushIntervalSecs: 0,
@@ -230,8 +244,8 @@ export async function dbcLaunch(
     initialCrBps: 15000,
     maintenanceCrBps: 12000,
     liqBonusBps: 500,
-    maxOpenInterest: new BN(0),
-    itemReserve: new BN(0),
+    maxOpenInterest: new BN("200000000000000"), // 200M tokens of short size cap
+    itemReserve: new BN(0), // item_reserve account funded off-chain post-launch
     unitsPerItemMicro: new BN(String(unitsPerItemMicro)),
     curveFeeBps: 70,
     ammFeeBps: 70,
@@ -242,13 +256,14 @@ export async function dbcLaunch(
   };
 
   await program.methods
-    .createExternalMarket(collection, params as any)
+    .createExternalMarket(collection, params as any, feeReceiverPk)
     .accountsPartial({
       global: globalPda,
       admin: admin.publicKey,
       market: marketPda,
       synthMint: baseMint.publicKey,
       treasury: treasuryPda,
+      itemReserve: itemReservePda,
       solVault: solVaultPda,
     })
     .rpc();

@@ -135,6 +135,7 @@ pub mod floorlaunch {
         ctx: Context<CreateExternalMarket>,
         collection: Pubkey,
         params: Option<MarketParams>,
+        fee_receiver: Pubkey,
     ) -> Result<()> {
         let params = params.unwrap_or(ctx.accounts.global.default_params);
         let m = &mut ctx.accounts.market;
@@ -149,6 +150,7 @@ pub mod floorlaunch {
         m.bump = ctx.bumps.market;
         m.vault_bump = ctx.bumps.sol_vault;
         m.treasury_bump = ctx.bumps.treasury;
+        m.fee_receiver = fee_receiver;
         transfer_in(
             &ctx.accounts.admin,
             &ctx.accounts.sol_vault,
@@ -838,6 +840,10 @@ pub mod floorlaunch {
             ctx.accounts.item_reserve.amount >= tokens_out,
             Err::ItemReserveDepleted
         );
+        // 0.7% swap fee: the user receives tokens_out net of the fee, which
+        // stays in the reserve (protocol). Same rate as the trade fee.
+        let fee = mul_bps(tokens_out, m.params.curve_fee_bps);
+        let net_out = tokens_out - fee;
         m.items_deposited += 1;
 
         // Item into the market escrow.
@@ -857,14 +863,14 @@ pub mod floorlaunch {
             &ctx.accounts.item_reserve,
             &ctx.accounts.user_token,
             &ctx.accounts.token_program,
-            tokens_out,
+            net_out,
         )?;
         emit!(ItemSwapped {
             market: ctx.accounts.market.key(),
             user: ctx.accounts.user.key(),
             item_mint: ctx.accounts.item_mint.key(),
             deposited: true,
-            tokens: tokens_out,
+            tokens: net_out,
         });
         Ok(())
     }
@@ -883,6 +889,10 @@ pub mod floorlaunch {
             * m.params.units_per_item_micro as u128)
             / m.mark_ema as u128
             / 1_000_000) as u64;
+        // 0.7% swap fee: the user pays the card value plus the fee; the extra
+        // accrues in the reserve (protocol).
+        let fee = mul_bps(tokens_in, m.params.curve_fee_bps);
+        let total_in = tokens_in + fee;
         m.items_deposited = m.items_deposited.saturating_sub(1);
 
         token::transfer(
@@ -894,7 +904,7 @@ pub mod floorlaunch {
                     authority: ctx.accounts.user.to_account_info(),
                 },
             ),
-            tokens_in,
+            total_in,
         )?;
         transfer_pool_tokens_out(
             &ctx.accounts.market,
@@ -908,7 +918,7 @@ pub mod floorlaunch {
             user: ctx.accounts.user.key(),
             item_mint: ctx.accounts.item_mint.key(),
             deposited: false,
-            tokens: tokens_in,
+            tokens: total_in,
         });
         Ok(())
     }
@@ -1294,6 +1304,17 @@ pub struct CreateExternalMarket<'info> {
         token::authority = market
     )]
     pub treasury: Account<'info, TokenAccount>,
+    // Item-swap reserve for external markets, funded off-chain by a plain SPL
+    // transfer of the reserved token allocation before item swaps can run.
+    #[account(
+        init,
+        payer = admin,
+        seeds = [b"items", market.key().as_ref()],
+        bump,
+        token::mint = synth_mint,
+        token::authority = market
+    )]
+    pub item_reserve: Account<'info, TokenAccount>,
     #[account(mut, seeds = [b"vault", market.key().as_ref()], bump)]
     pub sol_vault: SystemAccount<'info>,
     pub token_program: Program<'info, Token>,

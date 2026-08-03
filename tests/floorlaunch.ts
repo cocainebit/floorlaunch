@@ -580,14 +580,19 @@ describe("floorlaunch", () => {
       1_000_000_000_000n
     );
 
+    const [extItemReserve] = PublicKey.findProgramAddressSync(
+      [Buffer.from("items"), extMarket.toBuffer()],
+      program.programId
+    );
     await program.methods
-      .createExternalMarket(extCollection, null)
+      .createExternalMarket(extCollection, null, payer.publicKey)
       .accountsPartial({
         global: globalPda,
         admin: payer.publicKey,
         market: extMarket,
         synthMint: extMint,
         treasury: extTreasury,
+        itemReserve: extItemReserve,
         solVault: extVault,
       })
       .rpc();
@@ -761,7 +766,23 @@ describe("floorlaunch", () => {
       "0"
     );
 
-    // withdraw the copy back: pay tokens worth the card
+    // The 0.7% swap fee makes the round-trip cost more than the deposit
+    // returned; buy a buffer on the graduated AMM to cover it.
+    const sigT = await connection.requestAirdrop(shorter.publicKey, 5 * SOL);
+    await connection.confirmTransaction(sigT);
+    await program.methods
+      .ammBuy(new BN(2).mul(new BN(SOL)), new BN(0))
+      .accountsPartial({
+        market: marketPda,
+        synthMint: mintPda,
+        poolToken: poolPda,
+        solVault: vaultPda,
+        user: shorter.publicKey,
+        userAta: shorterAta,
+      })
+      .signers([shorter])
+      .rpc();
+    // withdraw the copy back: pay tokens worth the card + fee
     await program.methods
       .withdrawItem()
       .accountsPartial({
@@ -903,12 +924,28 @@ describe("floorlaunch", () => {
       (await connection.getTokenAccountBalance(userToken2)).value.amount
     );
     const drift = got.sub(expected).abs();
+    // Allow for the swap fee (up to 1%) plus EMA drift.
     assert.isTrue(
-      drift.mul(new BN(100)).lt(expected),
+      drift.mul(new BN(50)).lt(expected),
       `bootstrap deposit ${got} vs expected ~${expected}`
     );
     assert.equal((await program.account.market.fetch(m2)).itemsDeposited, 1);
 
+    // Cover the 0.7% round-trip fee: buy a little on the curve for the user.
+    const sigB = await connection.requestAirdrop(shorter.publicKey, 5 * SOL);
+    await connection.confirmTransaction(sigB);
+    await program.methods
+      .curveBuy(new BN(SOL), new BN(0))
+      .accountsPartial({
+        market: m2,
+        synthMint: mint2,
+        poolToken: pool2,
+        solVault: vault2,
+        user: shorter.publicKey,
+        userAta: userToken2,
+      })
+      .signers([shorter])
+      .rpc();
     await program.methods
       .withdrawItem()
       .accountsPartial({
