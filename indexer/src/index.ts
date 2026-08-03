@@ -203,6 +203,7 @@ async function pollMeteoraTrades() {
         if (!s.err) fresh.push(s);
       }
       fresh.reverse(); // oldest first
+      let added = 0;
       for (const s of fresh) {
         if (!first && seenSigs.has(s.signature)) continue;
         seenSigs.add(s.signature);
@@ -218,13 +219,21 @@ async function pollMeteoraTrades() {
           if (trade) {
             store(market).trades.push(trade);
             broadcast({ type: "trade", market, trade });
+            added++;
           }
-        } catch {}
+        } catch (e) {
+          console.log("meteora tx parse error", s.signature, (e as any)?.message ?? e);
+        }
       }
       // Keep the trade list time-ordered after a bulk backfill.
       if (first) store(market).trades.sort((a, b) => a.ts - b.ts);
+      if (first || added) {
+        console.log(`meteora poll ${market}: first=${first} sigs=${sigs.length} fresh=${fresh.length} added=${added}`);
+      }
       if (sigs[0]) meteoraLastSig.set(m.dbcPool, sigs[0].signature);
-    } catch {}
+    } catch (e) {
+      console.log("meteora poll error", m.dbcPool, (e as any)?.message ?? e);
+    }
   }
 }
 
@@ -266,6 +275,9 @@ function parseMeteoraSwap(tx: any, baseVault: string, quoteVault: string, ts: nu
 // webhook is (re)synced to watch every meteora pool on boot + on a timer.
 // Requires HELIUS_API_KEY; the poller remains as a backfill/fallback.
 const HELIUS_WEBHOOK_SECRET = process.env.HELIUS_WEBHOOK_SECRET;
+// Remembered across syncs so we UPDATE one webhook instead of creating a new one
+// every interval. Seeded from env, then discovered/created on first sync.
+let heliusWebhookId: string | undefined = process.env.HELIUS_WEBHOOK_ID;
 
 async function handleHeliusTx(payload: any): Promise<void> {
   const sig: string | undefined =
@@ -313,21 +325,36 @@ async function syncHeliusWebhook(): Promise<void> {
   };
   if (HELIUS_WEBHOOK_SECRET) body.authHeader = `Bearer ${HELIUS_WEBHOOK_SECRET}`;
   try {
-    const id = process.env.HELIUS_WEBHOOK_ID;
-    const url = id
-      ? `https://api.helius.xyz/v0/webhooks/${id}?api-key=${apiKey}`
+    // Discover existing webhooks so restarts (and prior duplicate-creating runs)
+    // converge on a single webhook for our URL instead of piling up new ones.
+    if (!heliusWebhookId) {
+      const listRes = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`);
+      const list: any[] = await listRes.json().catch(() => []);
+      const mine = Array.isArray(list)
+        ? list.filter((w) => w?.webhookURL === webhookURL)
+        : [];
+      if (mine.length) {
+        heliusWebhookId = mine[0].webhookID;
+        // Delete any duplicates pointing at the same URL (from earlier runs).
+        for (const dup of mine.slice(1)) {
+          await fetch(`https://api.helius.xyz/v0/webhooks/${dup.webhookID}?api-key=${apiKey}`, {
+            method: "DELETE",
+          }).catch(() => {});
+          console.log(`deleted duplicate helius webhook ${dup.webhookID}`);
+        }
+      }
+    }
+    const url = heliusWebhookId
+      ? `https://api.helius.xyz/v0/webhooks/${heliusWebhookId}?api-key=${apiKey}`
       : `https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`;
     const r = await fetch(url, {
-      method: id ? "PUT" : "POST",
+      method: heliusWebhookId ? "PUT" : "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
     const j: any = await r.json().catch(() => ({}));
-    if (!id && j?.webhookID) {
-      console.log(`created helius webhook ${j.webhookID} - set HELIUS_WEBHOOK_ID to reuse it`);
-    } else {
-      console.log(`synced helius webhook -> ${pools.length} pool(s)`);
-    }
+    if (j?.webhookID) heliusWebhookId = j.webhookID;
+    console.log(`synced helius webhook ${heliusWebhookId ?? "?"} -> ${pools.length} pool(s)`);
   } catch (e) {
     console.log("helius webhook sync failed:", (e as any)?.message ?? e);
   }
