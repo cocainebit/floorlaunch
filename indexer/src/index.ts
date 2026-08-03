@@ -81,7 +81,7 @@ interface Trade {
   priceSol: number;      // SOL per single token
   solAmount: number;     // SOL
   tokenAmount: number;   // whole tokens
-  phase: "curve" | "amm";
+  phase: "curve" | "amm" | "meteora";
   sig: string;
   user: string;
 }
@@ -158,6 +158,95 @@ async function meteoraPool(pool: string) {
     return null;
   }
 }
+
+// ---------- Meteora pool swap indexing (external markets) ----------
+// External markets trade on Meteora, not this program, so their swaps never
+// reach the onLogs subscription. Poll each DBC pool's signatures, derive each
+// swap from the base/quote vault balance deltas, and push it into the market's
+// trade feed so Activity + candles populate.
+const meteoraVaults = new Map<string, { base: string; quote: string }>();
+const meteoraLastSig = new Map<string, string>();
+
+async function poolVaults(pool: string) {
+  const hit = meteoraVaults.get(pool);
+  if (hit) return hit;
+  const p: any = await dbcClient.state.getPool(pool);
+  const ps = p?.poolState;
+  if (!ps) return null;
+  const v = { base: ps.baseVault.toBase58(), quote: ps.quoteVault.toBase58() };
+  meteoraVaults.set(pool, v);
+  return v;
+}
+
+async function pollMeteoraTrades() {
+  const listings = loadListings();
+  for (const [market, meta] of Object.entries(listings)) {
+    const m: any = meta;
+    if (m.venue !== "meteora" || !m.dbcPool) continue;
+    try {
+      const v = await poolVaults(m.dbcPool);
+      if (!v) continue;
+      const poolPk = new PublicKey(m.dbcPool);
+      const first = !meteoraLastSig.has(m.dbcPool);
+      const sigs = await connection.getSignaturesForAddress(poolPk, { limit: first ? 100 : 25 });
+      const last = meteoraLastSig.get(m.dbcPool);
+      const fresh: typeof sigs = [];
+      for (const s of sigs) {
+        if (s.signature === last) break;
+        if (!s.err) fresh.push(s);
+      }
+      fresh.reverse(); // oldest first
+      for (const s of fresh) {
+        if (seenSigs.has(s.signature)) continue;
+        seenSigs.add(s.signature);
+        try {
+          const tx = await connection.getParsedTransaction(s.signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment: "confirmed",
+          });
+          const trade = parseMeteoraSwap(tx, v.base, v.quote, s.blockTime ?? Math.floor(Date.now() / 1000), s.signature);
+          if (trade) {
+            store(market).trades.push(trade);
+            broadcast({ type: "trade", market, trade });
+          }
+        } catch {}
+      }
+      if (sigs[0]) meteoraLastSig.set(m.dbcPool, sigs[0].signature);
+    } catch {}
+  }
+}
+
+function parseMeteoraSwap(tx: any, baseVault: string, quoteVault: string, ts: number, sig: string): Trade | null {
+  if (!tx?.meta) return null;
+  const keys = tx.transaction.message.accountKeys.map((k: any) =>
+    (k.pubkey ?? k).toString()
+  );
+  const raw = (arr: any[], vault: string): number | null => {
+    const e = (arr ?? []).find((b: any) => keys[b.accountIndex] === vault);
+    return e ? Number(e.uiTokenAmount.amount) : null;
+  };
+  const bBefore = raw(tx.meta.preTokenBalances, baseVault);
+  const bAfter = raw(tx.meta.postTokenBalances, baseVault);
+  const qBefore = raw(tx.meta.preTokenBalances, quoteVault);
+  const qAfter = raw(tx.meta.postTokenBalances, quoteVault);
+  if (bBefore == null || bAfter == null || qBefore == null || qAfter == null) return null;
+  const dBase = bAfter - bBefore; // base units (6 dec)
+  const dQuote = qAfter - qBefore; // lamports
+  if (dBase === 0 || dQuote === 0) return null;
+  const tokens = Math.abs(dBase) / BASE_UNITS_PER_TOKEN;
+  const sol = Math.abs(dQuote) / LAMPORTS_PER_SOL;
+  return {
+    ts,
+    side: dBase < 0 ? "buy" : "sell", // base left the pool => user bought
+    priceSol: tokens > 0 ? sol / tokens : 0,
+    solAmount: sol,
+    tokenAmount: tokens,
+    phase: "meteora",
+    sig,
+    user: keys[0] ?? "",
+  };
+}
+
 const idl = JSON.parse(readFileSync(IDL_PATH, "utf8"));
 idl.address = PROGRAM_ID;
 const coder = new anchor.BorshCoder(idl);
@@ -712,6 +801,9 @@ async function refreshOracles() {
 }
 setInterval(refreshOracles, 300_000);
 setTimeout(refreshOracles, 15_000);
+// Meteora pool swap indexing for external markets (Activity + candles).
+setInterval(pollMeteoraTrades, 15_000);
+setTimeout(pollMeteoraTrades, 8_000);
 
 // Fee-split keeper: trading fees (0.70%) accrue per market on chain;
 // sweep any balance above 0.02 SOL as two withdraw_fees calls, half to
