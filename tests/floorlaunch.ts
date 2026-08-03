@@ -275,19 +275,17 @@ describe("floorlaunch", () => {
     assert.isTrue(m.ammTokenReserve.gt(new BN(0)));
   });
 
-  it("opens a short (mint against collateral)", async () => {
+  it("opens a cash-settled short (SOL collateral, no tokens drawn)", async () => {
     // 100k tokens = 1e11 base units, worth 10 SOL at the index.
-    // 150% CR needs 15 SOL, post 20 SOL.
-    const mintAmount = new BN("100000000000");
+    // 150% CR needs 15 SOL, post 20 SOL. Cash-settled: no tokens minted.
+    const size = new BN("100000000000");
     await program.methods
-      .openShort(new BN(20).mul(new BN(SOL)), mintAmount)
+      .openShort(new BN(20).mul(new BN(SOL)), size)
       .accountsPartial({
         market: marketPda,
-        synthMint: mintPda,
         solVault: vaultPda,
         position: shortPda(shorter.publicKey),
         owner: shorter.publicKey,
-        ownerAta: shorterAta,
       })
       .signers([shorter])
       .rpc();
@@ -295,8 +293,8 @@ describe("floorlaunch", () => {
       shortPda(shorter.publicKey)
     );
     assert.equal(p.collateral.toString(), (20 * SOL).toString());
-    const bal = await connection.getTokenAccountBalance(shorterAta);
-    assert.equal(bal.value.amount, mintAmount.toString());
+    // entry_notional records the index value shorted (~10 SOL), no token balance.
+    assert.isTrue(p.entryNotional.gt(new BN(0)));
     const m = await market();
     assert.isTrue(m.totalDebtScaled.gt(new BN(0)));
   });
@@ -307,11 +305,9 @@ describe("floorlaunch", () => {
         .openShort(new BN(1).mul(new BN(SOL)), new BN("100000000000"))
         .accountsPartial({
           market: marketPda,
-          synthMint: mintPda,
           solVault: vaultPda,
           position: shortPda(shorter.publicKey),
           owner: shorter.publicKey,
-          ownerAta: shorterAta,
         })
         .signers([shorter])
         .rpc();
@@ -347,23 +343,6 @@ describe("floorlaunch", () => {
     } catch (e: any) {
       assert.include(e.toString(), "InsufficientCollateral");
     }
-  });
-
-  it("repays and burns", async () => {
-    const repay = new BN("50000000000");
-    await program.methods
-      .repayBurn(repay)
-      .accountsPartial({
-        market: marketPda,
-        synthMint: mintPda,
-        position: shortPda(shorter.publicKey),
-        owner: shorter.publicKey,
-        ownerAta: shorterAta,
-      })
-      .signers([shorter])
-      .rpc();
-    const bal = await connection.getTokenAccountBalance(shorterAta);
-    assert.equal(bal.value.amount, "50000000000");
   });
 
   it("accrues funding toward the index", async () => {
@@ -410,18 +389,15 @@ describe("floorlaunch", () => {
     const victim = Keypair.generate();
     const sig = await connection.requestAirdrop(victim.publicKey, 20 * SOL);
     await connection.confirmTransaction(sig);
-    const victimAta = getAssociatedTokenAddressSync(mintPda, victim.publicKey);
     // 10k tokens = 1e10 base units, worth 1 SOL at the index. 150% = 1.5 SOL.
-    const mintAmount = new BN("10000000000");
+    const size = new BN("10000000000");
     await program.methods
-      .openShort(new BN("1500000000"), mintAmount)
+      .openShort(new BN("1500000000"), size)
       .accountsPartial({
         market: marketPda,
-        synthMint: mintPda,
         solVault: vaultPda,
         position: shortPda(victim.publicKey),
         owner: victim.publicKey,
-        ownerAta: victimAta,
       })
       .signers([victim])
       .rpc();
@@ -441,12 +417,10 @@ describe("floorlaunch", () => {
       .liquidate()
       .accountsPartial({
         market: marketPda,
-        synthMint: mintPda,
         solVault: vaultPda,
         position: shortPda(victim.publicKey),
         positionOwner: victim.publicKey,
         liquidator: payer.publicKey,
-        liquidatorAta: payerAta,
       })
       .rpc();
     const p = await program.account.shortPosition.fetch(
@@ -458,51 +432,41 @@ describe("floorlaunch", () => {
     assert.isTrue(liqBalanceAfter > liqBalanceBefore);
   });
 
-  it("closes an emptied position", async () => {
-    // Shorter repays the rest, withdraws everything, closes.
-    const pBefore = await program.account.shortPosition.fetch(
-      shortPda(shorter.publicKey)
-    );
-    const m = await market();
-    const debt = pBefore.debtScaled
-      .mul(m.fundingIndex)
-      .div(FUNDING_ONE);
+  it("closes a cash-settled short and returns collateral", async () => {
+    // Fresh position closed at the same index: PnL ~0, so collateral returns
+    // in full (minus tx fees). Cash-settled close settles + closes in one call.
+    const closer = Keypair.generate();
+    const sig = await connection.requestAirdrop(closer.publicKey, 20 * SOL);
+    await connection.confirmTransaction(sig);
+    const size = new BN("10000000000");
     await program.methods
-      .repayBurn(debt)
-      .accountsPartial({
-        market: marketPda,
-        synthMint: mintPda,
-        position: shortPda(shorter.publicKey),
-        owner: shorter.publicKey,
-        ownerAta: shorterAta,
-      })
-      .signers([shorter])
-      .rpc();
-    const p = await program.account.shortPosition.fetch(
-      shortPda(shorter.publicKey)
-    );
-    await program.methods
-      .withdrawCollateral(p.collateral)
+      .openShort(new BN(5).mul(new BN(SOL)), size)
       .accountsPartial({
         market: marketPda,
         solVault: vaultPda,
-        position: shortPda(shorter.publicKey),
-        owner: shorter.publicKey,
+        position: shortPda(closer.publicKey),
+        owner: closer.publicKey,
       })
-      .signers([shorter])
+      .signers([closer])
       .rpc();
+    const balAfterOpen = await connection.getBalance(closer.publicKey);
     await program.methods
       .closePosition()
       .accountsPartial({
-        position: shortPda(shorter.publicKey),
-        owner: shorter.publicKey,
+        market: marketPda,
+        solVault: vaultPda,
+        position: shortPda(closer.publicKey),
+        owner: closer.publicKey,
       })
-      .signers([shorter])
+      .signers([closer])
       .rpc();
     const gone = await program.account.shortPosition.fetchNullable(
-      shortPda(shorter.publicKey)
+      shortPda(closer.publicKey)
     );
     assert.isNull(gone);
+    // Collateral (5 SOL) + position rent came back.
+    const balAfterClose = await connection.getBalance(closer.publicKey);
+    assert.isTrue(balAfterClose > balAfterOpen + 4 * SOL);
   });
 
   it("enforces the staleness guard and param immutability", async () => {
@@ -516,19 +480,22 @@ describe("floorlaunch", () => {
         market: marketPda,
       })
       .rpc();
+    // Fresh, well-collateralized shorter so the revived open passes CR (size is
+    // tiny; this test is about the staleness guard, not collateralization).
+    const staler = Keypair.generate();
+    const sigS = await connection.requestAirdrop(staler.publicKey, 20 * SOL);
+    await connection.confirmTransaction(sigS);
     await sleep(2500);
     try {
       await program.methods
-        .openShort(new BN(2).mul(new BN(SOL)), new BN("1000000000"))
+        .openShort(new BN(10).mul(new BN(SOL)), new BN("1000000000"))
         .accountsPartial({
           market: marketPda,
-          synthMint: mintPda,
           solVault: vaultPda,
-          position: shortPda(shorter.publicKey),
-          owner: shorter.publicKey,
-          ownerAta: shorterAta,
+          position: shortPda(staler.publicKey),
+          owner: staler.publicKey,
         })
-        .signers([shorter])
+        .signers([staler])
         .rpc();
       assert.fail("should have thrown");
     } catch (e: any) {
@@ -538,16 +505,14 @@ describe("floorlaunch", () => {
     const m = await market();
     await pushIndex(m.indexLastRaw);
     await program.methods
-      .openShort(new BN(2).mul(new BN(SOL)), new BN("1000000000"))
+      .openShort(new BN(10).mul(new BN(SOL)), new BN("1000000000"))
       .accountsPartial({
         market: marketPda,
-        synthMint: mintPda,
         solVault: vaultPda,
-        position: shortPda(shorter.publicKey),
-        owner: shorter.publicKey,
-        ownerAta: shorterAta,
+        position: shortPda(staler.publicKey),
+        owner: staler.publicKey,
       })
-      .signers([shorter])
+      .signers([staler])
       .rpc();
     // Restore the relaxed params; curve virtuals must be immutable.
     await program.methods
@@ -683,37 +648,24 @@ describe("floorlaunch", () => {
       assert.include(e.toString(), "AccountNotInitialized");
     }
 
-    // Short opens by drawing the treasury reserve, not minting.
-    const treasuryBefore = (await getAccount(connection, extTreasury)).amount;
+    // Cash-settled short on the external market: SOL collateral only, no
+    // treasury draw and no token accounts. This is the Phase 2 hedge model.
     const [extShort] = PublicKey.findProgramAddressSync(
       [Buffer.from("short"), extMarket.toBuffer(), shorter.publicKey.toBuffer()],
       program.programId
     );
-    const shorterExtAta = await createAssociatedTokenAccount(
-      connection,
-      payer.payer,
-      extMint,
-      shorter.publicKey
-    );
-    const mintAmount = new BN("10000000000"); // 10k tokens = 1 SOL at index
     await program.methods
-      .openShort(new BN(2).mul(new BN(SOL)), mintAmount)
+      .openShort(new BN(2).mul(new BN(SOL)), new BN("10000000000"))
       .accountsPartial({
         market: extMarket,
-        synthMint: extMint,
-        treasury: extTreasury,
         solVault: extVault,
         position: extShort,
         owner: shorter.publicKey,
-        ownerAta: shorterExtAta,
       })
       .signers([shorter])
       .rpc();
-    const treasuryAfterOpen = (await getAccount(connection, extTreasury)).amount;
-    assert.equal(
-      (treasuryBefore - treasuryAfterOpen).toString(),
-      mintAmount.toString()
-    );
+    const sp = await program.account.shortPosition.fetch(extShort);
+    assert.isTrue(sp.entryNotional.gt(new BN(0)));
 
     // Funding runs off the pushed mark (2% premium pays shorts).
     await sleep(2000);
@@ -724,26 +676,19 @@ describe("floorlaunch", () => {
     em = await program.account.market.fetch(extMarket);
     assert.isTrue(em.fundingIndex.lt(FUNDING_ONE));
 
-    // Repay returns tokens to the treasury instead of burning.
-    const p = await program.account.shortPosition.fetch(extShort);
-    const debt = p.debtScaled.mul(em.fundingIndex).div(FUNDING_ONE);
+    // Close settles PnL in SOL against the index and removes the position.
     await program.methods
-      .repayBurn(debt)
+      .closePosition()
       .accountsPartial({
         market: extMarket,
-        synthMint: extMint,
-        treasury: extTreasury,
+        solVault: extVault,
         position: extShort,
         owner: shorter.publicKey,
-        ownerAta: shorterExtAta,
       })
       .signers([shorter])
       .rpc();
-    const treasuryAfterRepay = (await getAccount(connection, extTreasury)).amount;
-    assert.equal(
-      (treasuryAfterRepay - treasuryAfterOpen).toString(),
-      debt.toString()
-    );
+    const goneExt = await program.account.shortPosition.fetchNullable(extShort);
+    assert.isNull(goneExt);
   });
 
   it("swaps items in and out at card value", async () => {
@@ -778,9 +723,14 @@ describe("floorlaunch", () => {
       .mul(new BN("1000000000000"))
       .div(new BN(m0.markEma.toString()));
 
-    const balBefore = new BN(
-      (await connection.getTokenAccountBalance(shorterAta)).value.amount
-    );
+    // Cash-settled shorts no longer pre-create the synth ATA; depositItem
+    // creates it (init_if_needed), so default the pre-balance to 0.
+    let balBefore = new BN(0);
+    try {
+      balBefore = new BN(
+        (await connection.getTokenAccountBalance(shorterAta)).value.amount
+      );
+    } catch {}
     await program.methods
       .depositItem()
       .accountsPartial({

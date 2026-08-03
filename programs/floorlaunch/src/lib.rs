@@ -493,11 +493,16 @@ pub mod floorlaunch {
         Ok(())
     }
 
-    pub fn open_short(ctx: Context<OpenShort>, collateral: u64, mint_amount: u64) -> Result<()> {
+    /// Open (or add to) a CASH-SETTLED short hedge. `size` is the notional in
+    /// token base units the position is short. The hedger posts SOL collateral;
+    /// no tokens are drawn. PnL settles in SOL at close: profit (index fell) is
+    /// paid from the insurance fund, loss (index rose) refills it. The insurance
+    /// fund is the bounded counterparty, so shorts are capped by max_open_interest.
+    pub fn open_short(ctx: Context<OpenShort>, collateral: u64, size: u64) -> Result<()> {
         let m = &mut ctx.accounts.market;
         require!(m.status == MarketStatus::Live, Err::NotLive);
         require!(!m.frozen, Err::Frozen);
-        require!(collateral > 0 && mint_amount > 0, Err::ZeroAmount);
+        require!(collateral > 0 && size > 0, Err::ZeroAmount);
         require_fresh_index(m)?;
 
         let p = &mut ctx.accounts.position;
@@ -507,7 +512,7 @@ pub mod floorlaunch {
             p.bump = ctx.bumps.position;
         }
 
-        let new_debt = m.debt_from_scaled(p.debt_scaled) + mint_amount;
+        let new_debt = m.debt_from_scaled(p.debt_scaled) + size;
         let new_collateral = p.collateral + collateral;
         let debt_value = m.value_at_index(new_debt);
         require!(
@@ -515,12 +520,15 @@ pub mod floorlaunch {
             Err::InsufficientCollateral
         );
 
-        let total_debt = m.debt_from_scaled(m.total_debt_scaled) + mint_amount;
+        let total_debt = m.debt_from_scaled(m.total_debt_scaled) + size;
         require!(total_debt <= m.params.max_open_interest, Err::OpenInterestCapReached);
 
-        let scaled = m.scaled_from_debt(mint_amount);
+        // Record this leg's index value as the price we are short from.
+        let leg_notional = m.value_at_index(size);
+        let scaled = m.scaled_from_debt(size);
         p.debt_scaled += scaled;
         p.collateral = new_collateral;
+        p.entry_notional = p.entry_notional.saturating_add(leg_notional);
         m.total_debt_scaled += scaled;
         m.total_collateral += collateral;
 
@@ -529,19 +537,6 @@ pub mod floorlaunch {
             &ctx.accounts.sol_vault,
             &ctx.accounts.system_program,
             collateral,
-        )?;
-        // Both venues run fixed supply: CDP tokens come out of the
-        // program treasury, whose balance is the hard OI ceiling.
-        require!(
-            ctx.accounts.treasury.amount >= mint_amount,
-            Err::TreasuryDepleted
-        );
-        transfer_pool_tokens_out(
-            &ctx.accounts.market,
-            &ctx.accounts.treasury,
-            &ctx.accounts.owner_ata,
-            &ctx.accounts.token_program,
-            mint_amount,
         )?;
         emit!(ShortChanged {
             market: ctx.accounts.market.key(),
@@ -598,42 +593,6 @@ pub mod floorlaunch {
         Ok(())
     }
 
-    pub fn repay_burn(ctx: Context<RepayBurn>, amount: u64) -> Result<()> {
-        let m = &mut ctx.accounts.market;
-        require!(!m.frozen, Err::Frozen);
-        require!(amount > 0, Err::ZeroAmount);
-        let p = &mut ctx.accounts.position;
-        let debt = m.debt_from_scaled(p.debt_scaled);
-        require!(amount <= debt, Err::RepayTooLarge);
-
-        let scaled_repaid = if amount == debt {
-            p.debt_scaled
-        } else {
-            (amount as u128 * FUNDING_ONE) / m.funding_index
-        };
-        p.debt_scaled -= scaled_repaid;
-        m.total_debt_scaled = m.total_debt_scaled.saturating_sub(scaled_repaid);
-
-        token::transfer(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                token::Transfer {
-                    from: ctx.accounts.owner_ata.to_account_info(),
-                    to: ctx.accounts.treasury.to_account_info(),
-                    authority: ctx.accounts.owner.to_account_info(),
-                },
-            ),
-            amount,
-        )?;
-        emit!(ShortChanged {
-            market: ctx.accounts.market.key(),
-            owner: ctx.accounts.owner.key(),
-            collateral: ctx.accounts.position.collateral,
-            debt: debt - amount,
-        });
-        Ok(())
-    }
-
     pub fn accrue_funding(ctx: Context<AccrueFunding>) -> Result<()> {
         let m = &mut ctx.accounts.market;
         require!(m.status == MarketStatus::Live, Err::NotLive);
@@ -687,6 +646,12 @@ pub mod floorlaunch {
         Ok(())
     }
 
+    /// Liquidate an underwater cash-settled short. Trigger is unchanged: the
+    /// position is liquidatable once its collateral covers less than the
+    /// maintenance ratio of the size's current index value. No tokens move; the
+    /// liquidator earns a SOL bonus for cranking, the short's loss is absorbed by
+    /// the collateral, and whatever collateral is left after the bonus refills
+    /// the insurance fund (its role as the cash-settled counterparty).
     pub fn liquidate(ctx: Context<Liquidate>) -> Result<()> {
         let m = &mut ctx.accounts.market;
         require!(m.status == MarketStatus::Live, Err::NotLive);
@@ -696,49 +661,40 @@ pub mod floorlaunch {
         let debt = m.debt_from_scaled(p.debt_scaled);
         require!(debt > 0, Err::NotLiquidatable);
 
-        let debt_value = m.value_at_index(debt);
+        let notional_now = m.value_at_index(debt);
         require!(
-            (p.collateral as u128) * BPS < debt_value as u128 * m.params.maintenance_cr_bps as u128,
+            (p.collateral as u128) * BPS < notional_now as u128 * m.params.maintenance_cr_bps as u128,
             Err::NotLiquidatable
         );
 
-        // Liquidator burns the full debt from their own wallet.
-        let target_payout = debt_value + mul_bps(debt_value, m.params.liq_bonus_bps);
-        let mut payout = target_payout.min(p.collateral);
-        let mut owner_refund = p.collateral - payout;
-        if payout < target_payout {
-            let topup = (target_payout - payout).min(m.insurance_lamports);
-            m.insurance_lamports -= topup;
-            payout += topup;
-            owner_refund = 0;
-        }
+        let collateral = p.collateral;
+        // The short's realized loss (index rose above entry), capped at collateral,
+        // goes to insurance (its counterparty role). From the remaining equity the
+        // liquidator takes a bonus for cranking; the owner keeps the rest.
+        let loss = notional_now.saturating_sub(p.entry_notional).min(collateral);
+        let equity = collateral - loss;
+        let bonus = mul_bps(notional_now, m.params.liq_bonus_bps).min(equity);
+        let owner_refund = equity - bonus;
 
-        m.total_collateral -= p.collateral;
+        m.total_collateral -= collateral;
         m.total_debt_scaled = m.total_debt_scaled.saturating_sub(p.debt_scaled);
+        m.insurance_lamports += loss;
         p.collateral = 0;
         p.debt_scaled = 0;
+        p.entry_notional = 0;
 
-        token::transfer(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                token::Transfer {
-                    from: ctx.accounts.liquidator_ata.to_account_info(),
-                    to: ctx.accounts.treasury.to_account_info(),
-                    authority: ctx.accounts.liquidator.to_account_info(),
-                },
-            ),
-            debt,
-        )?;
         let market_key = ctx.accounts.market.key();
         let vault_bump = ctx.accounts.market.vault_bump;
-        transfer_out(
-            &ctx.accounts.sol_vault,
-            &ctx.accounts.liquidator.to_account_info(),
-            &ctx.accounts.system_program,
-            market_key,
-            vault_bump,
-            payout,
-        )?;
+        if bonus > 0 {
+            transfer_out(
+                &ctx.accounts.sol_vault,
+                &ctx.accounts.liquidator.to_account_info(),
+                &ctx.accounts.system_program,
+                market_key,
+                vault_bump,
+                bonus,
+            )?;
+        }
         if owner_refund > 0 {
             transfer_out(
                 &ctx.accounts.sol_vault,
@@ -754,15 +710,64 @@ pub mod floorlaunch {
             owner: ctx.accounts.position_owner.key(),
             liquidator: ctx.accounts.liquidator.key(),
             debt_burned: debt,
-            payout,
+            payout: bonus,
         });
         Ok(())
     }
 
+    /// Close a cash-settled short and settle its PnL in SOL. Profit (the index
+    /// fell below entry) is paid from the insurance fund; loss (the index rose)
+    /// is kept from the collateral and refills insurance. The owner receives
+    /// collateral +/- PnL. Profit payout is bounded by the insurance fund - the
+    /// counterparty is capped, matching the OI cap enforced at open.
     pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
-        let p = &ctx.accounts.position;
-        require!(p.debt_scaled == 0, Err::DebtOutstanding);
-        require!(p.collateral == 0, Err::InsufficientCollateral);
+        let m = &mut ctx.accounts.market;
+        require!(!m.frozen, Err::Frozen);
+        require_fresh_index(m)?;
+        let p = &mut ctx.accounts.position;
+
+        let debt = m.debt_from_scaled(p.debt_scaled);
+        let notional_now = m.value_at_index(debt);
+        let pnl = p.entry_notional as i128 - notional_now as i128; // >0 when index fell
+        let collateral = p.collateral;
+
+        let mut owner_out = collateral;
+        if pnl >= 0 {
+            // Profit, paid from insurance (bounded by what the fund holds).
+            let profit = (pnl as u128).min(m.insurance_lamports as u128) as u64;
+            m.insurance_lamports -= profit;
+            owner_out = owner_out.saturating_add(profit);
+        } else {
+            // Loss, deducted from collateral and kept in insurance.
+            let loss = ((-pnl) as u128).min(collateral as u128) as u64;
+            m.insurance_lamports += loss;
+            owner_out = owner_out.saturating_sub(loss);
+        }
+
+        m.total_collateral -= collateral;
+        m.total_debt_scaled = m.total_debt_scaled.saturating_sub(p.debt_scaled);
+        p.collateral = 0;
+        p.debt_scaled = 0;
+        p.entry_notional = 0;
+
+        if owner_out > 0 {
+            let market_key = ctx.accounts.market.key();
+            let vault_bump = ctx.accounts.market.vault_bump;
+            transfer_out(
+                &ctx.accounts.sol_vault,
+                &ctx.accounts.owner.to_account_info(),
+                &ctx.accounts.system_program,
+                market_key,
+                vault_bump,
+                owner_out,
+            )?;
+        }
+        emit!(ShortChanged {
+            market: ctx.accounts.market.key(),
+            owner: ctx.accounts.owner.key(),
+            collateral: 0,
+            debt: 0,
+        });
         Ok(())
     }
 
@@ -1368,14 +1373,6 @@ pub struct AmmTrade<'info> {
 pub struct OpenShort<'info> {
     #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
-    #[account(mut, address = market.synth_mint)]
-    pub synth_mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        seeds = [b"treasury", market.key().as_ref()],
-        bump = market.treasury_bump
-    )]
-    pub treasury: Account<'info, TokenAccount>,
     #[account(mut, seeds = [b"vault", market.key().as_ref()], bump = market.vault_bump)]
     pub sol_vault: SystemAccount<'info>,
     #[account(
@@ -1388,15 +1385,6 @@ pub struct OpenShort<'info> {
     pub position: Account<'info, ShortPosition>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    #[account(
-        init_if_needed,
-        payer = owner,
-        associated_token::mint = synth_mint,
-        associated_token::authority = owner
-    )]
-    pub owner_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -1419,32 +1407,6 @@ pub struct AdjustCollateral<'info> {
 }
 
 #[derive(Accounts)]
-pub struct RepayBurn<'info> {
-    #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
-    pub market: Account<'info, Market>,
-    #[account(mut, address = market.synth_mint)]
-    pub synth_mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        seeds = [b"treasury", market.key().as_ref()],
-        bump = market.treasury_bump
-    )]
-    pub treasury: Account<'info, TokenAccount>,
-    #[account(
-        mut,
-        seeds = [b"short", market.key().as_ref(), owner.key().as_ref()],
-        bump = position.bump,
-        has_one = owner
-    )]
-    pub position: Account<'info, ShortPosition>,
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(mut, associated_token::mint = synth_mint, associated_token::authority = owner)]
-    pub owner_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-}
-
-#[derive(Accounts)]
 pub struct AccrueFunding<'info> {
     #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
@@ -1454,14 +1416,6 @@ pub struct AccrueFunding<'info> {
 pub struct Liquidate<'info> {
     #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
-    #[account(mut, address = market.synth_mint)]
-    pub synth_mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        seeds = [b"treasury", market.key().as_ref()],
-        bump = market.treasury_bump
-    )]
-    pub treasury: Account<'info, TokenAccount>,
     #[account(mut, seeds = [b"vault", market.key().as_ref()], bump = market.vault_bump)]
     pub sol_vault: SystemAccount<'info>,
     #[account(
@@ -1471,29 +1425,32 @@ pub struct Liquidate<'info> {
         constraint = position.owner == position_owner.key() @ Err::Unauthorized
     )]
     pub position: Account<'info, ShortPosition>,
-    /// CHECK: receives the collateral remainder; validated against position.owner.
+    /// CHECK: validated against position.owner; receives the collateral remainder.
     #[account(mut)]
     pub position_owner: AccountInfo<'info>,
     #[account(mut)]
     pub liquidator: Signer<'info>,
-    #[account(mut, associated_token::mint = synth_mint, associated_token::authority = liquidator)]
-    pub liquidator_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct ClosePosition<'info> {
+    #[account(mut, seeds = [b"market", market.collection.as_ref()], bump = market.bump)]
+    pub market: Account<'info, Market>,
+    #[account(mut, seeds = [b"vault", market.key().as_ref()], bump = market.vault_bump)]
+    pub sol_vault: SystemAccount<'info>,
     #[account(
         mut,
         close = owner,
-        seeds = [b"short", position.market.as_ref(), owner.key().as_ref()],
+        seeds = [b"short", market.key().as_ref(), owner.key().as_ref()],
         bump = position.bump,
-        has_one = owner
+        has_one = owner,
+        constraint = position.market == market.key() @ Err::Unauthorized
     )]
     pub position: Account<'info, ShortPosition>,
     #[account(mut)]
     pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]

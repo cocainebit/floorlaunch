@@ -159,8 +159,15 @@ pub struct ShortPosition {
     pub owner: Pubkey,
     pub market: Pubkey,
     pub collateral: u64,
-    /// Debt in base units divided by funding_index at last touch, FUNDING_ONE scaled.
+    /// Short size in base units divided by funding_index at last touch,
+    /// FUNDING_ONE scaled. (Cash-settled: no tokens are drawn; this is the
+    /// notional size the position is short, and funding scales it over time.)
     pub debt_scaled: u128,
+    /// Lamport value the position is short from: the index-value of the size at
+    /// the moment each leg was opened, summed. Cash-settled PnL = entry_notional
+    /// minus the size's current index value. Profit (index fell) is paid from
+    /// the insurance fund; loss (index rose) refills it.
+    pub entry_notional: u64,
     pub bump: u8,
 }
 
