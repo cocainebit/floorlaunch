@@ -188,29 +188,41 @@ async function pollMeteoraTrades() {
       if (!v) continue;
       const poolPk = new PublicKey(m.dbcPool);
       const first = !meteoraLastSig.has(m.dbcPool);
-      const sigs = await connection.getSignaturesForAddress(poolPk, { limit: first ? 100 : 25 });
+      // First run per boot backfills the full history and rebuilds the market's
+      // meteora trades from scratch (drops any earlier-parsed ones so a fixed
+      // parse / timestamp replaces stale data instead of duplicating it).
+      const sigs = await connection.getSignaturesForAddress(poolPk, { limit: first ? 200 : 25 });
+      if (first) {
+        const s = store(market);
+        s.trades = s.trades.filter((t) => t.phase !== "meteora");
+      }
       const last = meteoraLastSig.get(m.dbcPool);
       const fresh: typeof sigs = [];
       for (const s of sigs) {
-        if (s.signature === last) break;
+        if (!first && s.signature === last) break;
         if (!s.err) fresh.push(s);
       }
       fresh.reverse(); // oldest first
       for (const s of fresh) {
-        if (seenSigs.has(s.signature)) continue;
+        if (!first && seenSigs.has(s.signature)) continue;
         seenSigs.add(s.signature);
         try {
           const tx = await connection.getParsedTransaction(s.signature, {
             maxSupportedTransactionVersion: 0,
             commitment: "confirmed",
           });
-          const trade = parseMeteoraSwap(tx, v.base, v.quote, s.blockTime ?? Math.floor(Date.now() / 1000), s.signature);
+          // Prefer the parsed tx blockTime (reliably present) over the signature
+          // list's blockTime (often null), so trades land in the right candle.
+          const ts = tx?.blockTime ?? s.blockTime ?? Math.floor(Date.now() / 1000);
+          const trade = parseMeteoraSwap(tx, v.base, v.quote, ts, s.signature);
           if (trade) {
             store(market).trades.push(trade);
             broadcast({ type: "trade", market, trade });
           }
         } catch {}
       }
+      // Keep the trade list time-ordered after a bulk backfill.
+      if (first) store(market).trades.sort((a, b) => a.ts - b.ts);
       if (sigs[0]) meteoraLastSig.set(m.dbcPool, sigs[0].signature);
     } catch {}
   }
