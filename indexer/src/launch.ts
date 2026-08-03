@@ -45,6 +45,12 @@ export interface ListingMeta {
   launchedBy: string;
   launchedAt: number;
   identifier: string;
+  // Venue: "internal" (Commas bonding curve) or "meteora" (DBC pool). Absent =
+  // legacy internal launches. External (Meteora) launches also carry the pool
+  // address and the externally-created SPL mint.
+  venue?: "internal" | "meteora";
+  synthMint?: string;
+  dbcPool?: string;
 }
 
 export function loadListings(): Record<string, ListingMeta> {
@@ -55,9 +61,14 @@ export function loadListings(): Record<string, ListingMeta> {
   }
 }
 
+export function saveListing(listings: Record<string, ListingMeta>): void {
+  writeFileSync(LISTINGS_PATH, JSON.stringify(listings, null, 2));
+}
+
 const kp = (path: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
 
+export { solUsd as solUsdPrice };
 async function solUsd(): Promise<number> {
   const r = await fetch(
     "https://hermes.pyth.network/v2/updates/price/latest?ids[]=0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d&parsed=true"

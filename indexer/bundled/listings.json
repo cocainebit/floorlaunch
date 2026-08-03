@@ -30,5 +30,24 @@
     "indexAtLaunchLamports": 440000000,
     "unitsPerItemMicro": 704000,
     "launchedAt": 1785158689
+  },
+  "CbjN43AhKVqF7jZN41SofWNFyKjRHkSKwxxByfdAo9Bs": {
+    "ticker": "MADLADS",
+    "name": "Mad Lads Floor",
+    "image": null,
+    "links": {},
+    "feeReceiver": {
+      "kind": "wallet",
+      "value": "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX"
+    },
+    "launchedBy": "BNbCZjxJJ3UT75XyvzHA7ZL9yb7kVonw2GR1TDtSGNAX",
+    "identifier": "magiceden:mad_lads",
+    "venue": "meteora",
+    "synthMint": "4sYbhfoEaYf6t3i17efFdHXb8mLzRkv6D8ajh2noXpZ9",
+    "dbcPool": "DaWxMxNso5aZt2gEU74EehnzXxrtkNQDMMfKMp7fvFis",
+    "feePaymentSig": null,
+    "indexAtLaunchLamports": 7258400000,
+    "unitsPerItemMicro": 11613440,
+    "launchedAt": 1785765494
   }
 }

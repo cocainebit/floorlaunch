@@ -13,6 +13,12 @@ import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import http from "node:http";
 import { devLaunch, loadListings, catalogByIdentifier, meFloor, oracleFeedLamports, cardHoldings, launchReadiness, loadCatalog } from "./launch.js";
+import { dbcLaunch } from "./dbc.js";
+import {
+  DynamicBondingCurveClient,
+  getPriceFromSqrtPrice,
+  TokenDecimal,
+} from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
@@ -35,6 +41,35 @@ const PROGRAM_ID = process.env.PROGRAM_ID ?? "QsixfrupxfVEDDYuQsR4vJcE58bbNfctD9
 const IDL_PATH = process.env.IDL_PATH ?? new URL("../../target/idl/floorlaunch.json", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = new URL("../data", import.meta.url).pathname;
+const LISTINGS_PATH = process.env.LISTINGS_PATH ?? new URL("../data/listings.json", import.meta.url).pathname;
+const BUNDLED_LISTINGS_PATH =
+  process.env.BUNDLED_LISTINGS_PATH ?? new URL("../bundled/listings.json", import.meta.url).pathname;
+
+// Seed/merge bundled listings into the durable volume on boot. The Dockerfile's
+// build-time seed is shadowed once the volume mounts, so markets added to the
+// bundled snapshot (e.g. a launch done outside the hosted indexer) are merged in
+// here for any market key not already present. Never overwrites live entries.
+(() => {
+  try {
+    const bundled = JSON.parse(readFileSync(BUNDLED_LISTINGS_PATH, "utf8"));
+    const current = existsSync(LISTINGS_PATH)
+      ? JSON.parse(readFileSync(LISTINGS_PATH, "utf8"))
+      : {};
+    let changed = false;
+    for (const [k, v] of Object.entries(bundled)) {
+      if (!current[k]) {
+        current[k] = v;
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeFileSync(LISTINGS_PATH, JSON.stringify(current, null, 2));
+      console.log(`seeded ${Object.keys(current).length} listing(s) into the volume`);
+    }
+  } catch (e) {
+    console.log("listing seed-merge skipped:", (e as any)?.message ?? e);
+  }
+})();
 
 const LAMPORTS_PER_SOL = 1e9;
 const BASE_UNITS_PER_TOKEN = 1e6;
@@ -95,6 +130,34 @@ function restore() {
 // ---------- chain ingestion ----------
 
 const connection = new Connection(RPC, { commitment: "confirmed", wsEndpoint: WS_RPC });
+// Meteora DBC client for reading external (Meteora) pool state in /markets.
+const dbcClient = DynamicBondingCurveClient.create(connection, "confirmed");
+const dbcPoolCache = new Map<string, { at: number; markPerToken: number; solReserve: number; tokenReserve: number }>();
+
+// Read a Meteora DBC pool's live price + reserves (10s cache). Returns null if
+// the pool can't be read, so the caller falls back to on-chain values.
+async function meteoraPool(pool: string) {
+  const hit = dbcPoolCache.get(pool);
+  if (hit && Date.now() - hit.at < 10_000) return hit;
+  try {
+    const p: any = await dbcClient.state.getPool(pool);
+    const ps = p?.poolState;
+    if (!ps) return null;
+    const priceSol = Number(
+      getPriceFromSqrtPrice(ps.sqrtPrice, TokenDecimal.SIX, TokenDecimal.NINE).toString()
+    );
+    const info = {
+      at: Date.now(),
+      markPerToken: priceSol,
+      solReserve: Number(ps.quoteReserve) / LAMPORTS_PER_SOL,
+      tokenReserve: Number(ps.baseReserve) / BASE_UNITS_PER_TOKEN,
+    };
+    dbcPoolCache.set(pool, info);
+    return info;
+  } catch {
+    return null;
+  }
+}
 const idl = JSON.parse(readFileSync(IDL_PATH, "utf8"));
 idl.address = PROGRAM_ID;
 const coder = new anchor.BorshCoder(idl);
@@ -245,6 +308,47 @@ getSolUsd();
 
 app.get("/listings", (_req, res) => res.json(loadListings()));
 
+// Token metadata JSON for a launched market's mint (Metaplex off-chain URI).
+// Meteora writes this URL into the DBC-created mint's on-chain metadata, so
+// Solscan and terminals render the collectible as the token's identity: the
+// card/collection name + image, plus an "Underlying" / "Collectible ID"
+// attribute set. Keyed by market PDA to match the listing store.
+app.get("/token-metadata/:id.json", (req, res) => {
+  const listings = loadListings();
+  // The mint's immutable metadata URI is keyed by MINT address; listings are
+  // keyed by market PDA. Resolve by either (mint via synthMint, or market key).
+  const id = req.params.id;
+  const meta: any =
+    listings[id] ?? Object.values(listings).find((l: any) => l.synthMint === id);
+  if (!meta) return res.status(404).json({ error: "unknown token" });
+  const u: any = catalogByIdentifier(meta.identifier) ?? {};
+  // Catalog images are relative (/underlyings/x.png) and served by the frontend,
+  // not this indexer - so for the token metadata JSON (fetched by Solscan) we
+  // resolve them to a public absolute URL (the repo's raw host by default).
+  const IMG_BASE =
+    process.env.UNDERLYINGS_IMAGE_BASE ??
+    "https://raw.githubusercontent.com/cocainebit/floorlaunch/main/app/public";
+  const image =
+    meta.image ??
+    (u.image ? (u.image.startsWith("http") ? u.image : `${IMG_BASE}${u.image}`) : undefined);
+  const underlyingName = u.name ?? meta.name;
+  const attributes = [
+    { trait_type: "Underlying", value: underlyingName },
+    u.collectionId ? { trait_type: "Collectible ID", value: u.collectionId } : null,
+    u.grade ? { trait_type: "Grade", value: u.grade } : null,
+    u.category ? { trait_type: "Category", value: u.category } : null,
+    { trait_type: "Venue", value: meta.venue === "meteora" ? "Meteora DBC" : "Commas" },
+  ].filter(Boolean);
+  res.json({
+    name: meta.name,
+    symbol: meta.ticker,
+    description: `${meta.name} is a commas market whose price tracks the ${underlyingName} collectible. Underlying: ${underlyingName}.`,
+    image,
+    external_url: meta.links?.website ?? "https://commas.art",
+    attributes,
+  });
+});
+
 // Which catalog underlyings does a wallet hold the backing collectible for?
 // Cards resolve against Collector Crypt's Core collection on-chain.
 app.get("/holdings/:owner", async (req, res) => {
@@ -333,7 +437,13 @@ app.get("/launch/readiness", async (req, res) => {
 
 app.post("/dev/launch", async (req, res) => {
   try {
-    const r = await devLaunch(RPC, PROGRAM_ID, structuredClone(idl), req.body);
+    // Venue switch: Meteora DBC when explicitly requested (body.venue) or when
+    // DBC_LAUNCH=1 is set. Gated (not the silent default) until the DBC path
+    // has had a live mainnet validation pass. Internal curve otherwise.
+    const useDbc = req.body?.venue === "meteora" || process.env.DBC_LAUNCH === "1";
+    const r = useDbc
+      ? await dbcLaunch(RPC, PROGRAM_ID, structuredClone(idl), req.body)
+      : await devLaunch(RPC, PROGRAM_ID, structuredClone(idl), req.body);
     res.json(r);
   } catch (e: any) {
     res.status(400).json({ error: String(e.message ?? e).slice(0, 200) });
@@ -350,51 +460,66 @@ app.get("/markets", async (_req, res) => {
     const accounts = await (program.account as any).market.all();
     const solUsd = await getSolUsd();
     const listings = loadListings();
-    const body = accounts
-      // Only listed markets: an on-chain market without listing metadata
-      // (e.g. a crashed launch) would render as an unknown ghost.
-      .filter((a: any) => listings[a.publicKey.toBase58()])
-      .map((a: any) => {
-        // The on-chain index is launch-scaled (0.625 SOL per unit at
-        // launch); recover the collectible's real price from the listing.
-        const meta: any = listings[a.publicKey.toBase58()];
-        const scaledUnitSol = Number(a.account.indexTwap) / LAMPORTS_PER_SOL;
-        const cardIndexSol =
-          meta?.indexAtLaunchLamports > 0
-            ? (scaledUnitSol / 0.625) * (meta.indexAtLaunchLamports / LAMPORTS_PER_SOL)
-            : scaledUnitSol;
-        return {
-        market: a.publicKey.toBase58(),
-        solUsd,
-        cardIndexSol,
-        unitsPerItem: (meta?.unitsPerItemMicro ?? 1_000_000) / 1_000_000,
-        collection: a.account.collection.toBase58(),
-        synthMint: a.account.synthMint.toBase58(),
-        status: Object.keys(a.account.status)[0],
-        venue: Object.keys(a.account.venue)[0],
-        frozen: a.account.frozen,
-        indexPerToken: Number(a.account.indexTwap) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
-        markPerToken: Number(a.account.markEma) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
-        indexLastTs: Number(a.account.indexLastTs),
-        feedAgeSec: (() => {
-          const ticks = store(a.publicKey.toBase58()).index;
-          return ticks.length
-            ? Math.floor(Date.now() / 1000) - ticks[ticks.length - 1].ts
-            : null;
-        })(),
-        ammSolReserve: Number(a.account.ammSolReserve) / LAMPORTS_PER_SOL,
-        ammTokenReserve: Number(a.account.ammTokenReserve) / BASE_UNITS_PER_TOKEN,
-        insuranceSol: Number(a.account.insuranceLamports) / LAMPORTS_PER_SOL,
-        totalCollateralSol: Number(a.account.totalCollateral) / LAMPORTS_PER_SOL,
-        fundingIndex: a.account.fundingIndex.toString(),
-        curveSolRaised: Number(a.account.curveSolRaised) / LAMPORTS_PER_SOL,
-        curveVirtualSol: Number(a.account.curveVirtualSol) / LAMPORTS_PER_SOL,
-        curveVirtualTokens: Number(a.account.curveVirtualTokens) / BASE_UNITS_PER_TOKEN,
-        graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
-        maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
-        itemsDeposited: a.account.itemsDeposited,
-      };
-      });
+    const body = await Promise.all(
+      accounts
+        // Only listed markets: an on-chain market without listing metadata
+        // (e.g. a crashed launch) would render as an unknown ghost.
+        .filter((a: any) => listings[a.publicKey.toBase58()])
+        .map(async (a: any) => {
+          // The on-chain index is launch-scaled (0.625 SOL per unit at
+          // launch); recover the collectible's real price from the listing.
+          const meta: any = listings[a.publicKey.toBase58()];
+          const scaledUnitSol = Number(a.account.indexTwap) / LAMPORTS_PER_SOL;
+          const cardIndexSol =
+            meta?.indexAtLaunchLamports > 0
+              ? (scaledUnitSol / 0.625) * (meta.indexAtLaunchLamports / LAMPORTS_PER_SOL)
+              : scaledUnitSol;
+          const row: any = {
+            market: a.publicKey.toBase58(),
+            solUsd,
+            cardIndexSol,
+            unitsPerItem: (meta?.unitsPerItemMicro ?? 1_000_000) / 1_000_000,
+            collection: a.account.collection.toBase58(),
+            synthMint: a.account.synthMint.toBase58(),
+            status: Object.keys(a.account.status)[0],
+            venue: Object.keys(a.account.venue)[0],
+            frozen: a.account.frozen,
+            indexPerToken: Number(a.account.indexTwap) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
+            markPerToken: Number(a.account.markEma) / LAMPORTS_PER_SOL / TOKENS_PER_UNIT,
+            indexLastTs: Number(a.account.indexLastTs),
+            feedAgeSec: (() => {
+              const ticks = store(a.publicKey.toBase58()).index;
+              return ticks.length
+                ? Math.floor(Date.now() / 1000) - ticks[ticks.length - 1].ts
+                : null;
+            })(),
+            ammSolReserve: Number(a.account.ammSolReserve) / LAMPORTS_PER_SOL,
+            ammTokenReserve: Number(a.account.ammTokenReserve) / BASE_UNITS_PER_TOKEN,
+            insuranceSol: Number(a.account.insuranceLamports) / LAMPORTS_PER_SOL,
+            totalCollateralSol: Number(a.account.totalCollateral) / LAMPORTS_PER_SOL,
+            fundingIndex: a.account.fundingIndex.toString(),
+            curveSolRaised: Number(a.account.curveSolRaised) / LAMPORTS_PER_SOL,
+            curveVirtualSol: Number(a.account.curveVirtualSol) / LAMPORTS_PER_SOL,
+            curveVirtualTokens: Number(a.account.curveVirtualTokens) / BASE_UNITS_PER_TOKEN,
+            graduationTargetSol: Number(a.account.params.graduationTargetSol) / LAMPORTS_PER_SOL,
+            maxOpenInterest: Number(a.account.params.maxOpenInterest) / BASE_UNITS_PER_TOKEN,
+            itemsDeposited: a.account.itemsDeposited,
+          };
+          // External (Meteora DBC) markets: override the traded price + liquidity
+          // with the live pool so the explorer reflects the real Meteora venue.
+          if (meta?.venue === "meteora" && meta.dbcPool) {
+            row.venue = "meteora";
+            row.dbcPool = meta.dbcPool;
+            const pool = await meteoraPool(meta.dbcPool);
+            if (pool) {
+              row.markPerToken = pool.markPerToken;
+              row.ammSolReserve = pool.solReserve;
+              row.ammTokenReserve = pool.tokenReserve;
+            }
+          }
+          return row;
+        })
+    );
     marketsCache = { at: Date.now(), body };
     res.json(body);
   } catch (e: any) {
@@ -553,8 +678,9 @@ async function refreshOracles() {
         // launch, moving with the collectible from there.
         const atLaunch = (meta as any).indexAtLaunchLamports;
         const scaled = atLaunch > 0 ? Math.round((lamports / atLaunch) * 625_000_000) : lamports;
+        const BN = (await import("bn.js")).default;
         await prog.methods
-          .pushIndex(new (await import("bn.js")).default(scaled))
+          .pushIndex(new BN(scaled))
           .accountsPartial({
             global: globalPda,
             oracleAuthority: oracle.publicKey,
@@ -562,6 +688,24 @@ async function refreshOracles() {
           })
           .signers([oracle])
           .rpc();
+        // External (Meteora) markets: also push the live pool price as the mark
+        // (the traded price the premium/funding math compares to the index).
+        // markPerToken is SOL/token; the on-chain mark is lamports per 1M-token
+        // unit, so scale by 1e15 (1e6 tokens/unit * 1e9 lamports/SOL).
+        if ((meta as any).venue === "meteora" && (meta as any).dbcPool) {
+          const pool = await meteoraPool((meta as any).dbcPool);
+          if (pool && pool.markPerToken > 0) {
+            await prog.methods
+              .pushMark(new BN(Math.round(pool.markPerToken * 1e15)))
+              .accountsPartial({
+                global: globalPda,
+                oracleAuthority: oracle.publicKey,
+                market: new PublicKey(market),
+              })
+              .signers([oracle])
+              .rpc();
+          }
+        }
       } catch {}
     }
   } catch {}
