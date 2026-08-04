@@ -18,7 +18,10 @@ import {
   DynamicBondingCurveClient,
   getPriceFromSqrtPrice,
   TokenDecimal,
+  deriveDammV2PoolAddress,
+  DAMM_V2_MIGRATION_FEE_ADDRESS,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { CpAmm } from "@meteora-ag/cp-amm-sdk";
 import { resolveSecretKey } from "./keypair.js";
 import {
   getOrCreateEscrow,
@@ -81,7 +84,7 @@ interface Trade {
   priceSol: number;      // SOL per single token
   solAmount: number;     // SOL
   tokenAmount: number;   // whole tokens
-  phase: "curve" | "amm" | "meteora";
+  phase: "curve" | "amm" | "meteora" | "meteora_amm";
   sig: string;
   user: string;
 }
@@ -132,6 +135,8 @@ function restore() {
 const connection = new Connection(RPC, { commitment: "confirmed", wsEndpoint: WS_RPC });
 // Meteora DBC client for reading external (Meteora) pool state in /markets.
 const dbcClient = DynamicBondingCurveClient.create(connection, "confirmed");
+const cpClient = new CpAmm(connection);
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const dbcPoolCache = new Map<string, { at: number; markPerToken: number; solReserve: number; tokenReserve: number }>();
 
 // Read a Meteora DBC pool's live price + reserves (10s cache). Returns null if
@@ -178,62 +183,180 @@ async function poolVaults(pool: string) {
   return v;
 }
 
-async function pollMeteoraTrades() {
-  const listings = loadListings();
-  for (const [market, meta] of Object.entries(listings)) {
-    const m: any = meta;
-    if (m.venue !== "meteora" || !m.dbcPool) continue;
-    try {
-      const v = await poolVaults(m.dbcPool);
-      if (!v) continue;
-      const poolPk = new PublicKey(m.dbcPool);
-      const first = !meteoraLastSig.has(m.dbcPool);
-      // First run per boot backfills the full history and rebuilds the market's
-      // meteora trades from scratch (drops any earlier-parsed ones so a fixed
-      // parse / timestamp replaces stale data instead of duplicating it).
-      const sigs = await connection.getSignaturesForAddress(poolPk, { limit: first ? 200 : 25 });
-      if (first) {
-        const s = store(market);
-        s.trades = s.trades.filter((t) => t.phase !== "meteora");
-      }
-      const last = meteoraLastSig.get(m.dbcPool);
-      const fresh: typeof sigs = [];
-      for (const s of sigs) {
-        if (!first && s.signature === last) break;
-        if (!s.err) fresh.push(s);
-      }
-      fresh.reverse(); // oldest first
-      let added = 0;
-      for (const s of fresh) {
-        if (!first && seenSigs.has(s.signature)) continue;
-        seenSigs.add(s.signature);
-        try {
-          const tx = await connection.getParsedTransaction(s.signature, {
-            maxSupportedTransactionVersion: 0,
-            commitment: "confirmed",
-          });
-          // Prefer the parsed tx blockTime (reliably present) over the signature
-          // list's blockTime (often null), so trades land in the right candle.
-          const ts = tx?.blockTime ?? s.blockTime ?? Math.floor(Date.now() / 1000);
-          const trade = parseMeteoraSwap(tx, v.base, v.quote, ts, s.signature);
-          if (trade) {
-            store(market).trades.push(trade);
-            broadcast({ type: "trade", market, trade });
-            added++;
-          }
-        } catch (e) {
-          console.log("meteora tx parse error", s.signature, (e as any)?.message ?? e);
-        }
-      }
-      // Keep the trade list time-ordered after a bulk backfill.
-      if (first) store(market).trades.sort((a, b) => a.ts - b.ts);
-      if (first || added) {
-        console.log(`meteora poll ${market}: first=${first} sigs=${sigs.length} fresh=${fresh.length} added=${added}`);
-      }
-      if (sigs[0]) meteoraLastSig.set(m.dbcPool, sigs[0].signature);
-    } catch (e) {
-      console.log("meteora poll error", m.dbcPool, (e as any)?.message ?? e);
+// A DBC pool migrates to a DAMM v2 pool within seconds of launch; after that all
+// real volume/trades live on the DAMM v2 pool, not the DBC pool. Resolve (and
+// cache) that migrated pool + its vaults so the poller can index it too. Returns
+// null while the market is still on the bonding curve (not yet migrated).
+const dammV2Cache = new Map<string, { pool: string; base: string; quote: string } | null>();
+async function dammV2Vaults(dbcPool: string, synthMint?: string) {
+  if (dammV2Cache.has(dbcPool)) return dammV2Cache.get(dbcPool) ?? null;
+  try {
+    if (!synthMint) return null;
+    const dbcState: any = await dbcClient.state.getPool(dbcPool);
+    if (!dbcState?.poolState?.isMigrated) {
+      // Not migrated yet: don't cache a null (re-check next cycle).
+      return null;
     }
+    const cfg: any = await dbcClient.state.getPoolConfig(dbcState.poolState.config);
+    const opt = Number(cfg.migrationFeeOption);
+    const dammCfg = (DAMM_V2_MIGRATION_FEE_ADDRESS as any[])[opt];
+    const poolPk = deriveDammV2PoolAddress(
+      new PublicKey(dammCfg),
+      new PublicKey(synthMint),
+      new PublicKey(WSOL_MINT)
+    );
+    const ps: any = await cpClient.fetchPoolState(poolPk);
+    const v = {
+      pool: poolPk.toBase58(),
+      base: ps.tokenAVault.toBase58(),
+      quote: ps.tokenBVault.toBase58(),
+    };
+    dammV2Cache.set(dbcPool, v);
+    console.log(`resolved DAMM v2 pool for ${dbcPool.slice(0, 8)} -> ${v.pool}`);
+    return v;
+  } catch (e) {
+    console.log("dammV2 resolve err", dbcPool.slice(0, 8), (e as any)?.message ?? e);
+    return null;
+  }
+}
+
+// Live price + reserves from a migrated market's DAMM v2 pool. The DBC pool's
+// sqrtPrice freezes at migration and its reserves drain, so a migrated market
+// must read its mark price and liquidity from here, not from meteoraPool().
+const dammV2InfoCache = new Map<
+  string,
+  { at: number; markPerToken: number; solReserve: number; tokenReserve: number }
+>();
+async function dammV2PoolInfo(v2pool: string) {
+  const hit = dammV2InfoCache.get(v2pool);
+  if (hit && Date.now() - hit.at < 10_000) return hit;
+  try {
+    const ps: any = await cpClient.fetchPoolState(new PublicKey(v2pool));
+    const markPerToken = Number(
+      getPriceFromSqrtPrice(ps.sqrtPrice, TokenDecimal.SIX, TokenDecimal.NINE).toString()
+    );
+    const [bb, qb] = await Promise.all([
+      connection.getTokenAccountBalance(ps.tokenAVault),
+      connection.getTokenAccountBalance(ps.tokenBVault),
+    ]);
+    const info = {
+      at: Date.now(),
+      markPerToken,
+      solReserve: Number(qb.value.amount) / LAMPORTS_PER_SOL,
+      tokenReserve: Number(bb.value.amount) / BASE_UNITS_PER_TOKEN,
+    };
+    dammV2InfoCache.set(v2pool, info);
+    return info;
+  } catch (e) {
+    console.log("dammV2 info err", v2pool.slice(0, 8), (e as any)?.message ?? e);
+    return null;
+  }
+}
+
+// Authoritative 24h volume across ALL of a token's pools (DBC + migrated DAMM v2),
+// from DexScreener. We can't cheaply backfill 24h of DAMM v2 swaps into the trade
+// store, so the headline 24h number comes from here; the trade store still drives
+// the chart + activity from the recent swaps we do poll.
+const dexVolCache = new Map<string, { sol: number; at: number }>();
+async function dexVolume24hSol(mint: string, solUsd: number): Promise<number | null> {
+  if (!mint || !(solUsd > 0)) return null;
+  const hit = dexVolCache.get(mint);
+  if (hit && Date.now() - hit.at < 120_000) return hit.sol;
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    const j: any = await r.json();
+    const usd = (j?.pairs ?? []).reduce(
+      (s: number, p: any) => s + (Number(p?.volume?.h24) || 0),
+      0
+    );
+    const sol = usd / solUsd;
+    dexVolCache.set(mint, { sol, at: Date.now() });
+    return sol;
+  } catch {
+    return null;
+  }
+}
+
+// Poll one Meteora pool (DBC bonding curve OR migrated DAMM v2) for swaps and
+// merge them into the market's trade store. `phase` tags which pool each trade
+// came from so a first-run rebuild only drops that pool's trades, not the other's
+// (a market has both a DBC-phase history and a DAMM v2 post-migration history).
+async function pollPoolSwaps(
+  market: string,
+  poolAddr: string,
+  vaults: { base: string; quote: string },
+  phase: "meteora" | "meteora_amm",
+  firstLimit: number,
+) {
+  const poolPk = new PublicKey(poolAddr);
+  const first = !meteoraLastSig.has(poolAddr);
+  const sigs = await connection.getSignaturesForAddress(poolPk, { limit: first ? firstLimit : 25 });
+  if (first) {
+    const s = store(market);
+    s.trades = s.trades.filter((t) => t.phase !== phase);
+  }
+  const last = meteoraLastSig.get(poolAddr);
+  const fresh: typeof sigs = [];
+  for (const s of sigs) {
+    if (!first && s.signature === last) break;
+    if (!s.err) fresh.push(s);
+  }
+  fresh.reverse(); // oldest first
+  let added = 0;
+  for (const s of fresh) {
+    if (!first && seenSigs.has(s.signature)) continue;
+    seenSigs.add(s.signature);
+    try {
+      const tx = await connection.getParsedTransaction(s.signature, {
+        maxSupportedTransactionVersion: 0,
+        commitment: "confirmed",
+      });
+      // Prefer the parsed tx blockTime (reliably present) over the signature
+      // list's blockTime (often null), so trades land in the right candle.
+      const ts = tx?.blockTime ?? s.blockTime ?? Math.floor(Date.now() / 1000);
+      const trade = parseMeteoraSwap(tx, vaults.base, vaults.quote, ts, s.signature);
+      if (trade) {
+        trade.phase = phase;
+        store(market).trades.push(trade);
+        broadcast({ type: "trade", market, trade });
+        added++;
+      }
+    } catch (e) {
+      console.log("pool tx parse error", s.signature, (e as any)?.message ?? e);
+    }
+  }
+  if (first) store(market).trades.sort((a, b) => a.ts - b.ts);
+  if (first || added) {
+    console.log(`pool poll ${market} ${phase}: first=${first} sigs=${sigs.length} fresh=${fresh.length} added=${added}`);
+  }
+  if (sigs[0]) meteoraLastSig.set(poolAddr, sigs[0].signature);
+}
+
+// Re-entrancy guard: the first-run backfill (hundreds of getParsedTransaction
+// calls) can take longer than the poll interval, so without this the next tick
+// would start a second concurrent backfill and both would re-add the same swaps.
+let meteoraPolling = false;
+async function pollMeteoraTrades() {
+  if (meteoraPolling) return;
+  meteoraPolling = true;
+  try {
+    const listings = loadListings();
+    for (const [market, meta] of Object.entries(listings)) {
+      const m: any = meta;
+      if (m.venue !== "meteora" || !m.dbcPool) continue;
+      try {
+        // 1) DBC bonding-curve pool: the pre-migration launch trades.
+        const v = await poolVaults(m.dbcPool);
+        if (v) await pollPoolSwaps(market, m.dbcPool, v, "meteora", 200);
+        // 2) Migrated DAMM v2 pool: where all the real post-migration volume lives.
+        const v2 = await dammV2Vaults(m.dbcPool, m.synthMint);
+        if (v2) await pollPoolSwaps(market, v2.pool, { base: v2.base, quote: v2.quote }, "meteora_amm", 400);
+      } catch (e) {
+        console.log("meteora poll error", m.dbcPool, (e as any)?.message ?? e);
+      }
+    }
+  } finally {
+    meteoraPolling = false;
   }
 }
 
@@ -561,6 +684,50 @@ app.get("/holdings/:owner", async (req, res) => {
   }
 });
 
+// Full holder list for a mint, done server-side so clients need no Helius key.
+// Enumerates every token account via DAS getTokenAccounts (getTokenLargestAccounts
+// caps at 20 and DAS is not on the public RPC), aggregates by owner, and keeps
+// only real wallets (pool/program vaults are off-curve PDAs).
+app.get("/holders/:mint", async (req, res) => {
+  try {
+    const mint = req.params.mint;
+    const balances = new Map<string, bigint>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 25; page++) {
+      const r = await fetch(DAS_RPC, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "holders",
+          method: "getTokenAccounts",
+          params: { mint, limit: 1000, ...(cursor ? { cursor } : {}) },
+        }),
+      });
+      const j: any = await r.json();
+      const accounts: any[] = j?.result?.token_accounts ?? [];
+      if (!accounts.length) break;
+      for (const a of accounts) {
+        const owner = String(a.owner ?? "");
+        let amount = 0n;
+        try { amount = BigInt(a.amount ?? 0); } catch { amount = 0n; }
+        if (!owner || amount === 0n) continue;
+        let onCurve = false;
+        try { onCurve = PublicKey.isOnCurve(new PublicKey(owner).toBytes()); } catch { onCurve = false; }
+        if (!onCurve) continue;
+        balances.set(owner, (balances.get(owner) ?? 0n) + amount);
+      }
+      cursor = j?.result?.cursor;
+      if (!cursor) break;
+    }
+    const out = Array.from(balances, ([address, balance]) => ({ address, balance: balance.toString() }))
+      .sort((a, b) => (BigInt(a.balance) === BigInt(b.balance) ? 0 : BigInt(a.balance) > BigInt(b.balance) ? -1 : 1));
+    res.json(out);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? String(e) });
+  }
+});
+
 app.get("/escrows", (_req, res) => res.json(listEscrows()));
 
 app.post("/escrow", (req, res) => {
@@ -740,12 +907,23 @@ app.get("/markets", async (_req, res) => {
           if (meta?.venue === "meteora" && meta.dbcPool) {
             row.venue = "meteora";
             row.dbcPool = meta.dbcPool;
-            const pool = await meteoraPool(meta.dbcPool);
+            // Migrated markets: read live price + reserves from the DAMM v2 pool.
+            // The DBC pool freezes at the migration price and drains afterward, so
+            // reading it gave a stale mark, market cap, and liquidity.
+            const v2 = await dammV2Vaults(meta.dbcPool, (meta as any).synthMint);
+            const pool = v2
+              ? await dammV2PoolInfo(v2.pool)
+              : await meteoraPool(meta.dbcPool);
             if (pool) {
               row.markPerToken = pool.markPerToken;
               row.ammSolReserve = pool.solReserve;
               row.ammTokenReserve = pool.tokenReserve;
             }
+            // After migration the real 24h volume lives on the DAMM v2 pool, which
+            // the trade store only partially backfills. Prefer DexScreener's true
+            // cross-pool 24h volume when it's higher than what we've indexed.
+            const dexVol = await dexVolume24hSol((meta as any).synthMint, row.solUsd);
+            if (dexVol != null && dexVol > row.volume24hSol) row.volume24hSol = dexVol;
           }
           return row;
         })
