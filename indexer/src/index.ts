@@ -187,7 +187,10 @@ async function poolVaults(pool: string) {
 // real volume/trades live on the DAMM v2 pool, not the DBC pool. Resolve (and
 // cache) that migrated pool + its vaults so the poller can index it too. Returns
 // null while the market is still on the bonding curve (not yet migrated).
-const dammV2Cache = new Map<string, { pool: string; base: string; quote: string } | null>();
+const dammV2Cache = new Map<string, { pool: string; base: string; quote: string; feeBps: number } | null>();
+// Meteora migration fee options map to fixed DAMM v2 fee tiers (bps), indexed by
+// PoolConfig.migrationFeeOption: FixedBps25/30/100/200/400/600.
+const MIGRATION_FEE_BPS = [25, 30, 100, 200, 400, 600];
 async function dammV2Vaults(dbcPool: string, synthMint?: string) {
   if (dammV2Cache.has(dbcPool)) return dammV2Cache.get(dbcPool) ?? null;
   try {
@@ -210,6 +213,7 @@ async function dammV2Vaults(dbcPool: string, synthMint?: string) {
       pool: poolPk.toBase58(),
       base: ps.tokenAVault.toBase58(),
       quote: ps.tokenBVault.toBase58(),
+      feeBps: MIGRATION_FEE_BPS[opt] ?? 100,
     };
     dammV2Cache.set(dbcPool, v);
     console.log(`resolved DAMM v2 pool for ${dbcPool.slice(0, 8)} -> ${v.pool}`);
@@ -275,6 +279,44 @@ async function dexVolume24hSol(mint: string, solUsd: number): Promise<number | n
   } catch {
     return null;
   }
+}
+
+// Lifetime totals across a market's pools, derived from the pool fee accumulators
+// (monotonic and exact). Volume = DBC fees / 0.7% + DAMM v2 fees / its migration
+// fee tier. Creator fees = the DBC creator half + the DAMM v2 LP fee (the creator
+// holds 100% of the migrated, permanently-locked LP). Both only ever go up.
+const feeStatsCache = new Map<
+  string,
+  { volumeSol: number; creatorFeesSol: number; at: number }
+>();
+async function marketFeeStats(
+  dbcPool: string,
+  synthMint?: string
+): Promise<{ volumeSol: number; creatorFeesSol: number }> {
+  const hit = feeStatsCache.get(dbcPool);
+  if (hit && Date.now() - hit.at < 60_000)
+    return { volumeSol: hit.volumeSol, creatorFeesSol: hit.creatorFeesSol };
+  let volumeSol = 0;
+  let creatorFeesSol = 0;
+  try {
+    const m: any = await dbcClient.state.getPoolFeeMetrics(new PublicKey(dbcPool));
+    const dbcFeeSol = Number(m.total?.totalTradingQuoteFee ?? 0) / LAMPORTS_PER_SOL;
+    volumeSol += dbcFeeSol / 0.007;
+    creatorFeesSol += dbcFeeSol / 2; // creator = 50% of the DBC trade fee
+  } catch {}
+  try {
+    const v2 = await dammV2Vaults(dbcPool, synthMint);
+    if (v2) {
+      const ps: any = await cpClient.fetchPoolState(new PublicKey(v2.pool));
+      const lpFeeSol = Number(ps.metrics?.totalLpBFee ?? 0) / LAMPORTS_PER_SOL;
+      const protoFeeSol = Number(ps.metrics?.totalProtocolBFee ?? 0) / LAMPORTS_PER_SOL;
+      const rate = v2.feeBps / 10_000;
+      if (rate > 0) volumeSol += (lpFeeSol + protoFeeSol) / rate;
+      creatorFeesSol += lpFeeSol; // creator holds 100% of the migrated LP
+    }
+  } catch {}
+  feeStatsCache.set(dbcPool, { volumeSol, creatorFeesSol, at: Date.now() });
+  return { volumeSol, creatorFeesSol };
 }
 
 // Poll one Meteora pool (DBC bonding curve OR migrated DAMM v2) for swaps and
@@ -924,6 +966,11 @@ app.get("/markets", async (_req, res) => {
             // cross-pool 24h volume when it's higher than what we've indexed.
             const dexVol = await dexVolume24hSol((meta as any).synthMint, row.solUsd);
             if (dexVol != null && dexVol > row.volume24hSol) row.volume24hSol = dexVol;
+            // Lifetime total volume + creator fees across both pools, from the fee
+            // accumulators (monotonic; the 24h figure decays as the launch ages out).
+            const feeStats = await marketFeeStats(meta.dbcPool, (meta as any).synthMint);
+            (row as any).volumeTotalSol = feeStats.volumeSol;
+            (row as any).creatorFeesTotalSol = feeStats.creatorFeesSol;
           }
           return row;
         })
